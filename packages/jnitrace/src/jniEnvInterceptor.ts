@@ -14,6 +14,7 @@ abstract class JNIEnvInterceptor {
         if (caller.includes('Nonvirtual')) {
             methodIndex = NON_VIRTUAL_METHOD_ID_INDEX;
         }
+        if (caller.endsWith('jmethodIDz')) return [];
         if (!caller.endsWith('va_list') && !caller.endsWith('jvalue')) {
             return null;
         }

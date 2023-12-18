@@ -5,7 +5,7 @@ import { Color, subLogger } from '@clockwork/logging';
 const { red, dim, blue } = Color.use();
 const logger = subLogger('cocos2dx');
 
-type ModuleOffset = { name: string; offset: NativePointer };
+type Cocos2dxOffset = { name: string; fn_dump?: NativePointer; fn_key?: NativePointer };
 
 function hookLegacy(): NativePointer[] {
     //@ts-ignore
@@ -59,45 +59,55 @@ const hookLuaLLoadbuffer: InvocationListenerCallbacks = {
     onLeave(retval) {},
 };
 
-function dump(...targets: ModuleOffset[]) {
-    const notFoundId = setTimeout(() => logger.warn('10 seconds have passed and no cocos2dx methods were called yet'), 10000)
+function dump(...targets: Cocos2dxOffset[]) {
+    const notFoundId = setTimeout(() => logger.warn('10 seconds have passed and no cocos2dx methods were called yet'), 10000);
     Inject.afterInitArrayModule((module: Module) => {
-        const addresses: NativePointer[] = [];
-        targets.forEach(({ name, offset }) => {
-            if (name === module.name) {
-                addresses.push(module.base.add(offset));
+        const evalStringAddresses: NativePointer[] = [];
+        const xxteaAddresses: NativePointer[] = [];
+        targets.forEach(({ name, fn_dump, fn_key }) => {
+            if (fn_dump && name === module.name) {
+                evalStringAddresses.push(module.base.add(fn_dump));
+            }
+            if (fn_key && name === module.name) {
+                xxteaAddresses.push(module.base.add(fn_key));
             }
         });
+
         if (parseInt(Frida.version.split('.')[0]) <= 15) {
-            addresses.push(...hookLegacy());
+            evalStringAddresses.push(...hookLegacy());
         } else {
             let hookTemp = module.findExportByName('_ZN2se12ScriptEngine10evalStringEPKclPNS_5ValueES2_');
             hookTemp ??= module.findExportByName('_ZN2se12ScriptEngine10evalStringEPKcjPNS_5ValueES2_');
             hookTemp ??= module.findExportByName('_ZN2se12ScriptEngine10evalStringEPKciPNS_5ValueES2_');
-            hookTemp && addresses.push(hookTemp);
+            hookTemp && evalStringAddresses.push(hookTemp);
         }
-        addresses.forEach((address) => {
+        evalStringAddresses.forEach((address) => {
             logger.info(`evalString ${module.name} ${DebugSymbol.fromAddress(address)}`);
             Interceptor.attach(address, hookEvalString);
         });
+
+        // luad load buffer
         const lual = module.findExportByName('luaL_loadbuffer');
         if (lual) {
-            logger.info(`luaL_loadbuffer ${module.name} ${lual}`);
+            logger.info(`luaL_loadbuffer ${module.name} ${DebugSymbol.fromAddress(lual)}`);
             Interceptor.attach(lual, hookLuaLLoadbuffer);
         }
+
+        // xxtea decrypt
         const xxtea_decrypt = module.findExportByName('_Z13xxtea_decryptPhjS_jPj');
-        if (xxtea_decrypt) {
-            logger.info(`xxtea_decrypt ${module.name} ${xxtea_decrypt}`);
-            Interceptor.attach(xxtea_decrypt, {
+        xxtea_decrypt && xxteaAddresses.push(xxtea_decrypt);
+        xxteaAddresses.forEach((address) => {
+            logger.info(`xxtea_decrypt ${module.name} ${DebugSymbol.fromAddress(address)}`);
+            Interceptor.attach(address, {
                 onEnter: function (args) {
                     logger.info('key -> ' + args[2].readCString(Math.min(args[3].toUInt32(), 16)));
                 },
                 onLeave: function (retval) {},
             });
-        }
+        });
 
-        if (addresses.length > 0 || lual || xxtea_decrypt) {
-            clearTimeout(notFoundId)
+        if (evalStringAddresses.length > 0 || lual || xxteaAddresses.length > 0) {
+            clearTimeout(notFoundId);
         }
     });
 }

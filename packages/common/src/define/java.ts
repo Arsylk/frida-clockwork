@@ -22,6 +22,8 @@ const ClassesString = {
     Method: 'java.lang.reflect.Method',
     Runtime: 'java.lang.Runtime',
     Map$Entry: 'java.util.Map$Entry',
+    Locale: 'java.util.Locale',
+    TimeZone: 'java.util.TimeZone',
 
     Application: 'android.app.Application',
     WebView: 'android.webkit.WebView',
@@ -35,6 +37,7 @@ const ClassesString = {
     SharedPreferences: 'android.content.SharedPreferences',
     PackageManager: 'android.content.pm.PackageManager',
     TelephonyManager: 'android.telephony.TelephonyManager',
+    Build: 'android.os.Build',
 };
 
 type ClassesType = PropertyJavaUseMapper<typeof ClassesString>;

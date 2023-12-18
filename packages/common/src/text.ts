@@ -12,8 +12,16 @@ function toHex(decimal: any): string {
 }
 
 function toByteSize(size: number): string {
-    const i = size == 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
+    const i = size === 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
     return Number((size / Math.pow(1024, i)).toFixed(2)) * 1 + ' ' + ['B', 'kB', 'MB', 'GB', 'TB'][i];
+}
+
+function stringNumber(length: number): string { 
+    let text = '';
+    for (let i = 0; i < length; i++) {
+        text += `${Math.floor((Math.random() * 10)) % 10}`
+    }
+    return text;
 }
 
 const PRIMITIVE_TYPE: { [key: string]: string } = {
@@ -37,4 +45,4 @@ function toPrettyType(type: string): string {
     return (PRIMITIVE_TYPE[type] ?? type) + '[]'.repeat(depth);
 }
 
-export { maxLengh, noLines, toHex, toByteSize, toPrettyType };
+export { maxLengh, noLines, toHex, toByteSize, toPrettyType, stringNumber };

@@ -1,9 +1,9 @@
 import { resolve } from 'path';
 
 export default {
-    entry: './agent/index.ts',
+    entry: './agent/justdump.ts',
     output: {
-        filename: 'script.js',
+        filename: 'justdump.js',
         path: resolve('./agent/dist'),
     },
     module: {
@@ -48,6 +48,5 @@ export default {
             fs: 'frida-fs',
         },
     },
-    mode: 'development',
-    devtool: 'inline-source-map',
+    mode: 'production',
 };

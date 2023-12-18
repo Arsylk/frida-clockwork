@@ -1,4 +1,2 @@
-import { attachGetAddrInfo, attachGetHostByName } from './hostaddr.js';
-import { attachNativeSocket } from './socket.js';
-
-export { attachNativeSocket, attachGetAddrInfo, attachGetHostByName }
+export { attachGetAddrInfo, attachGetHostByName, attachInteAton } from './hostaddr.js';
+export { attachNativeSocket } from './socket.js';

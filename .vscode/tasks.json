@@ -43,7 +43,7 @@
                 "-f",
                 "${input:appPackage}",
                 "-l",
-                "script.js"
+                "agent/dist/justdump.js"
                 // "dumpjs_key_hook.js"
             ],
             "type": "shell",
@@ -157,7 +157,7 @@
             "label": "Cocos2dx Dump",
             "detail": "Pull dumped cocos2dx scripts",
             "type": "shell",
-            "command": "adb shell su 0 'cp -r /data/data/${input:appPackage}/files/dump_cocos2dx_${input:appPackage} /sdcard/cocos2dx/' && adb pull /sdcard/cocos2dx/dump_cocos2dx_${input:appPackage} ~/Downloads",
+            "command": "adb-files-workspace ${input:appPackage} files/dump_cocos2dx_${input:appPackage}",
             "icon": {
                 "id": "debug-reverse-continue"
             },

@@ -17,12 +17,15 @@ type HookParameters = {
     replace?: FridaMethodReplacement;
     after?: FridaAfterMethod;
     logging?: Partial<LoggerOptions>;
+    loggingPredicate?: LoggingPredicate,
 };
 
 type MethodHookPredicate = (
     overload: any, // ! do bettert
     index: number,
 ) => boolean;
+
+type LoggingPredicate = (this: Java.Wrapper, method: Java.Method, ...args: any[]) => boolean;
 
 type FridaMethodReplacement = (this: Java.Wrapper, method: Java.Method, ...args: any[]) => any;
 type FridaMethodReplacementOptional = ReturnOptional<FridaMethodReplacement>;

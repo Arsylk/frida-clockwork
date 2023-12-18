@@ -96,7 +96,7 @@ function formatCallMethod(nativeName: string, jMethodId: NativePointer, method: 
 function formatMethodReturn(value: NativePointer | null): string | null {
     if (!value || value.isNull()) return null;
     let text = `${value}`;
-    let type = Java.vm.tryGetEnv()?.getObjectClassName(value);
+    let type = null; // Java.vm.tryGetEnv()?.getObjectClassName(value);
     if (type && (type = Text.toPrettyType(type))) {
         if (type == Classes.String.$className) {
             text = yellow(`"${Java.cast(value, Classes.String)}"`);
@@ -184,29 +184,29 @@ function hookLibart(predicate: (thisRef: InvocationContext) => boolean) {
                 ToReflectedMethod = new NativeFunction(address, 'pointer', ['pointer', 'pointer', 'pointer']);
                 logger.trace('ToReflectedMethod is at', address, name);
             } else if (name.includes('GetArrayLength')) {
-                Interceptor.attach(address, {
-                    onLeave: hookIfTag('GetArrayLength', (retval) => `${retval}`),
-                });
+                // Interceptor.attach(address, {
+                //     onLeave: hookIfTag('GetArrayLength', (retval) => `${retval}`),
+                // });
             } else if (name.includes('SetByteArrayRegion')) {
-                Interceptor.attach(address, {
-                    onLeave: hookIfTag('SetByteArrayRegion', (retval) => `${retval}`),
-                });
+                // Interceptor.attach(address, {
+                //     onLeave: hookIfTag('SetByteArrayRegion', (retval) => `${retval}`),
+                // });
             } else if (name.includes('NewObjectArray')) {
-                Interceptor.attach(address, {
-                    onLeave: hookIfTag('NewObjectArray', (retval) => `${retval}`),
-                });
+                // Interceptor.attach(address, {
+                //     onLeave: hookIfTag('NewObjectArray', (retval) => `${retval}`),
+                // });
             } else if (name.includes('SetObjectArrayElement')) {
-                Interceptor.attach(address, {
-                    onEnter: hookIfTag('SetObjectArrayElement', (args) => `${args[2]} -> ${args[3]}`),
-                });
+                // Interceptor.attach(address, {
+                //     onEnter: hookIfTag('SetObjectArrayElement', (args) => `${args[2]} -> ${args[3]}`),
+                // });
             } else if (name.includes('ReleaseByteArrayElements')) {
-                Interceptor.attach(address, {
-                    onEnter: hookIfTag('ReleaseByteArrayElements', (args) => `${args[2]} -> ${args[3]}`),
-                });
+                // Interceptor.attach(address, {
+                //     onEnter: hookIfTag('ReleaseByteArrayElements', (args) => `${args[2]} -> ${args[3]}`),
+                // });
             } else if (name.includes('GetByteArrayElements')) {
-                Interceptor.attach(address, {
-                    onLeave: hookIfTag('GetByteArrayElements', (retval) => `${retval}, ${retval.readByteArray(32)}`),
-                });
+                // Interceptor.attach(address, {
+                //     onLeave: hookIfTag('GetByteArrayElements', (retval) => `${retval}, ${retval.readByteArray(32)}`),
+                // });
             }
         }
     });
@@ -222,13 +222,13 @@ function hookLibart(predicate: (thisRef: InvocationContext) => boolean) {
             onEnter: hookIfTag('NewStringUTF', (args) => yellow(`"${args[1].readCString()}"`)),
         });
 
-    addrsDefineClass.forEach((addres) => {
-        Interceptor.attach(addres, {
-            // jclass & 	DefineClass (JNIEnv &env, const char *name, jobject &loader, const jbyte *buf, jsize size)
-            // auto 	DefineClass (JNIEnv &env, const char *name, jobject &loader, const Array &buf) -> std::enable_if_t< IsArraylike< Array >::value, jclass & >
-            onEnter: hookIfTag('DefineClass', (args) => args[1].readCString()),
-        });
-    });
+    // addrsDefineClass.forEach((addres) => {
+    //     Interceptor.attach(addres, {
+    //         // jclass & 	DefineClass (JNIEnv &env, const char *name, jobject &loader, const jbyte *buf, jsize size)
+    //         // auto 	DefineClass (JNIEnv &env, const char *name, jobject &loader, const Array &buf) -> std::enable_if_t< IsArraylike< Array >::value, jclass & >
+    //         onEnter: hookIfTag('DefineClass', (args) => args[1].readCString()),
+    //     });
+    // });
 
     addrFindClass &&
         Interceptor.attach(addrFindClass, {
@@ -255,32 +255,32 @@ function hookLibart(predicate: (thisRef: InvocationContext) => boolean) {
     };
     addrGetMethodID && Interceptor.attach(addrGetMethodID, getMethodId(false));
     addrGetStaticMethodID && Interceptor.attach(addrGetStaticMethodID, getMethodId(true));
-    addrGetFieldID &&
-        Interceptor.attach(addrGetFieldID, {
-            // jfieldID & 	GetFieldID (JNIEnv &env, jclass &clazz, const char *name, const char *sig)
-            onEnter: hookIfTag('GetFieldID', (args) => {
-                if (args[2] === null) return null;
+    // addrGetFieldID &&
+    //     Interceptor.attach(addrGetFieldID, {
+    //         // jfieldID & 	GetFieldID (JNIEnv &env, jclass &clazz, const char *name, const char *sig)
+    //         onEnter: hookIfTag('GetFieldID', (args) => {
+    //             if (args[2] === null) return null;
 
-                const clazz = args[1];
-                const name = args[2].readCString();
-                const className = Java.vm.tryGetEnv().getClassName(clazz);
-                const sig = args[3].readCString();
-                return `${className}::${name}${sig}`;
-            }),
-        });
-    addrGetStaticFieldID &&
-        Interceptor.attach(addrGetStaticFieldID, {
-            // jfieldID & 	GetStaticFieldID (JNIEnv &env, jclass &clazz, const char *name, const char *sig)
-            onEnter: hookIfTag('GetStaticFieldID', (args) => {
-                if (args[2] === null) return null;
+    //             const clazz = args[1];
+    //             const name = args[2].readCString();
+    //             const className = Java.vm.tryGetEnv().getClassName(clazz);
+    //             const sig = args[3].readCString();
+    //             return `${className}::${name}${sig}`;
+    //         }),
+    //     });
+    // addrGetStaticFieldID &&
+    //     Interceptor.attach(addrGetStaticFieldID, {
+    //         // jfieldID & 	GetStaticFieldID (JNIEnv &env, jclass &clazz, const char *name, const char *sig)
+    //         onEnter: hookIfTag('GetStaticFieldID', (args) => {
+    //             if (args[2] === null) return null;
 
-                const clazz = args[1];
-                const name = args[2].readCString();
-                const className = Java.vm.tryGetEnv().getClassName(clazz);
-                const sig = args[3].readCString();
-                return `${className}::${name}${sig}`;
-            }),
-        });
+    //             const clazz = args[1];
+    //             const name = args[2].readCString();
+    //             const className = Java.vm.tryGetEnv().getClassName(clazz);
+    //             const sig = args[3].readCString();
+    //             return `${className}::${name}${sig}`;
+    //         }),
+    //     });
 
     addrsCallStatic.forEach(({ address, name }) => {
         Interceptor.attach(address, {

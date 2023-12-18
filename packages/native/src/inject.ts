@@ -104,6 +104,13 @@ namespace Inject {
             },
         });
     }
+
+
+    /** very useful for not hooking hardware, chrome, and other things you that cause crashes */
+    export function isWithinOwnRange(ptr: NativePointer): boolean {
+        const path = modules.findPath(ptr);
+        return path?.includes('/data') === true
+    }
 }
 
 export { Inject };

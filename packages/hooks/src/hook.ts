@@ -4,7 +4,7 @@ import { logger } from '@clockwork/logging';
 import { HookParameters } from './types.js';
 
 function hook(clazzOrName: Java.Wrapper | string, methodName: string, params: HookParameters = {}): void {
-    const { before, replace, after, logging } = params;
+    const { before, replace, after, logging, loggingPredicate } = params;
     const logger = getLogger(logging);
 
     const clazz: Java.Wrapper = isJWrapper(clazzOrName) ? clazzOrName : Java.use(clazzOrName);
@@ -29,13 +29,14 @@ function hook(clazzOrName: Java.Wrapper | string, methodName: string, params: Ho
 
         const methodDef: Java.Method = method.overload(...argTypesString);
         methodDef.implementation = function (...params: any[]) {
-            logger.printCall(classString, methodName, params, returnTypeString, replace !== undefined);
+            const doLog = (loggingPredicate) ? loggingPredicate.call(this, methodDef, ...params) : true
+            doLog && logger.printCall(classString, methodName, params, returnTypeString, replace !== undefined);
 
             before?.call(this, methodDef, ...params);
             const returnValue: any | undefined = replace ? replace.call(this, methodDef, ...params) : methodDef.call(this, ...params);
             after?.call(this, methodDef, returnValue, ...params);
 
-            logger.printReturn(returnValue);
+            doLog && logger.printReturn(returnValue);
 
             return returnValue;
         };

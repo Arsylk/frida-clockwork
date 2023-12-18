@@ -12,5 +12,7 @@
         { "path": "packages/jnitrace" },
         { "path": "packages/cocos2dx" },
         { "path": "packages/unity" },
+        { "path": "packages/anticloak" },
+        { "path": "packages/dump" },
     ]
 }

@@ -1,0 +1,15 @@
+{
+    "name": "@clockwork/dump",
+    "version": "1.0.0",
+    "description": "",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "type": "module",
+    "author": "Arsylk",
+    "license": "ISC",
+    "dependencies": {
+        "@clockwork/common": "^1.0.0",
+        "@clockwork/native": "^1.0.0",
+        "@clockwork/logging": "^1.0.0"
+    }
+}

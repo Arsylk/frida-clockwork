@@ -65,7 +65,7 @@ function dumpFile(stringPtr: NativePointer, size: number, relativePath: string, 
     mkdir(dexDir);
 
     const fullpath = `${dexDir}/${relativePath}`;
-    Memory.protect(stringPtr, size, 'rw');
+    // Memory.protect(stringPtr, size, 'rw');
     const buffer = stringPtr.readCString(size);
     if (!buffer) {
         return false;

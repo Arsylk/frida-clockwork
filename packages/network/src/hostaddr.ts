@@ -1,27 +1,26 @@
+import { Libc } from '@clockwork/common';
 import { logger, Color } from '@clockwork/logging';
 
 function attachGetHostByName() {
-    const gethostbyname = Module.getExportByName('libc.so', 'gethostbyname');
-    Interceptor.attach(gethostbyname, {
+    Interceptor.attach(Libc.gethostbyname, {
         onEnter(args) {
             this.name = args[0].readCString();
         },
-        onLeave(res) {
-            logger.info({ tag: 'gethostbyname' }, `${Color.url(this.name)} -> result: ${res}`);
+        onLeave(retval) {
+            logger.info({ tag: 'gethostbyname' }, `${Color.url(this.name)} -> result: ${retval}`);
         },
     });
 }
 
 function attachGetAddrInfo(detailed: boolean = false) {
-    const getaddrinfo = Module.getExportByName('libc.so', 'getaddrinfo');
-    Interceptor.attach(getaddrinfo, {
+    Interceptor.attach(Libc.getaddrinfo, {
         onEnter(args) {
             this.host = args[0].readCString();
             this.port = args[1].readCString();
             this.result = args[2];
         },
-        onLeave(res) {
-            const resInt = res.toUInt32();
+        onLeave(retval) {
+            const resInt = retval.toUInt32();
             const text = !this.port || this.port === 'null' ? `${this.host}` : `${this.host}:${this.port}`;
             const result = resInt === 0x0 ? 'success' : 'failure';
             logger.info({ tag: 'getaddrinfo' }, `${Color.url(text)} -> ${result}`);
@@ -59,4 +58,16 @@ function attachGetAddrInfo(detailed: boolean = false) {
     });
 }
 
-export { attachGetAddrInfo, attachGetHostByName };
+function attachInteAton() {
+    Interceptor.attach(Libc.inet_aton, {
+        onEnter(args) {
+            this.addr = args[0].readCString();
+        },
+        onLeave(retval) {
+            logger.info({tag: 'inet_aton'}, `${this.addr} -> ${retval}`)
+        },
+    })
+}
+
+
+export { attachGetAddrInfo, attachGetHostByName, attachInteAton };

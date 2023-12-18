@@ -62,9 +62,56 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', '__system_property_read');
         return new NativeFunction(ptr, 'int', ['pointer', 'pointer', 'pointer']);
     },
-    
+    // struct hostent *gethostbyname(const char *name);
+    gethostbyname: () => {
+        const ptr = Module.getExportByName('libc.so', 'gethostbyname');
+        return new NativeFunction(ptr, 'pointer', ['pointer']);
+    },
+    // int getaddrinfo(const char *restrict node,
+    //                const char *restrict service,
+    //                const struct addrinfo *restrict hints,
+    //                struct addrinfo **restrict res);
+    getaddrinfo: () => {
+        const ptr = Module.getExportByName('libc.so', 'getaddrinfo');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer', 'pointer', 'pointer']);
+    },
+    // int inet_aton(const char *cp, struct in_addr *addr);
+    inet_aton: () => {
+        const ptr = Module.getExportByName('libc.so', 'inet_aton');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
+    },
+    // pid_t fork(void);
+    fork: () => {
+        const ptr = Module.getExportByName('libc.so', 'fork');
+        return new NativeFunction(ptr, 'int', []);
+    },
+    // int gettimeofday(struct timeval *restrict tv, struct timezone *_Nullable restrict tz);
+    gettimeofday: () => {
+        const ptr = Module.getExportByName('libc.so', 'gettimeofday');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
+    },
+    // int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);
+    pthread_mutex_init: () => {
+        const ptr = Module.getExportByName('libc.so', 'pthread_mutex_init');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
+    },
+    // int pthread_mutex_lock(pthread_mutex_t *mutex);
+    pthread_mutex_lock: () => {
+        const ptr = Module.getExportByName('libc.so', 'pthread_mutex_lock');
+        return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+    // int pthread_mutex_unlock(pthread_mutex_t *mutex);
+    pthread_mutex_unlock: () => {
+        const ptr = Module.getExportByName('libc.so', 'pthread_mutex_unlock');
+        return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+    // int pthread_detach(pthread_t thread);
+    pthread_detach: () => {
+        const ptr = Module.getExportByName('libc.so', 'pthread_detach');
+        return new NativeFunction(ptr, 'int', ['pointer']);
+    }
 };
 
 type LibcType = PropertyCallbackMapper<typeof LibcFinder>;
 const LibcFinderProxy: LibcType = proxyCallback(LibcFinder);
-export { LibcType, LibcFinderProxy};
+export { LibcType, LibcFinderProxy };

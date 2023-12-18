@@ -4,3 +4,6 @@ src:"([A-Za-z]+://)([-\w]+(?:\.\w[-\w]*)+)(:\d+)?(/[^.!,?"<>\[\]{}\s\x7F-\xFF]*(
 
 
 src:"getcookie|csrf|c_user|mnemonic|seed phrase|secret phrase" regex:yes
+
+bat --style=numbers --paging=never --lines session.txt | fzf --ansi --keep-right  --layout=reverse --preview-window :follow --pr
+ompt '> ' --header 'Session logs' --bind "start:reload:$CMD" --bind "change:reload:speed 0.1; $CMD || true" -e -i
