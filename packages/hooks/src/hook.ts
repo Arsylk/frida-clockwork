@@ -29,14 +29,14 @@ function hook(clazzOrName: Java.Wrapper | string, methodName: string, params: Ho
 
         const methodDef: Java.Method = method.overload(...argTypesString);
         methodDef.implementation = function (...params: any[]) {
-            const doLog = (loggingPredicate) ? loggingPredicate.call(this, methodDef, ...params) : true
+            const doLog = loggingPredicate ? loggingPredicate.call(this, methodDef, ...params) : true;
             doLog && logger.printCall(classString, methodName, params, returnTypeString, replace !== undefined);
 
             before?.call(this, methodDef, ...params);
             const returnValue: any | undefined = replace ? replace.call(this, methodDef, ...params) : methodDef.call(this, ...params);
             after?.call(this, methodDef, returnValue, ...params);
 
-            doLog && logger.printReturn(returnValue);
+            if (returnTypeString !== 'void') doLog && logger.printReturn(returnValue);
 
             return returnValue;
         };

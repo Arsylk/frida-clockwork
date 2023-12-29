@@ -19,9 +19,9 @@ function ColorMethod(jMethodId: NativePointer, method: JavaMethod): string {
     sb += Color.className(method.className);
     sb += '::';
     sb += Color.method(method.name);
-    sb += blue('(');
+    sb += Color.bracket('(');
     sb += method.javaParams.map(Color.className).join(', ');
-    sb += blue(')');
+    sb += Color.bracket(')');
     sb += ': ';
     sb += Color.className(method.javaRet);
 
@@ -35,13 +35,13 @@ function ColorMethodInvoke(method: JavaMethod, args: any[]): string {
     sb += Color.className(method.className);
     sb += '::';
     sb += Color.method(method.name);
-    sb += blue('(');
+    sb += Color.bracket('(');
     if (args.length > 0) {
         sb += '\n';
         sb += args.map((arg) => `    ${arg}`).join(', \n');
         sb += '\n';
     }
-    sb += blue(')');
+    sb += Color.bracket(')');
     sb += ': ';
     sb += Color.className(method.javaRet);
 

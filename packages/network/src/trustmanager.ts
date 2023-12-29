@@ -1,5 +1,6 @@
-import { getHookUnique, Addons } from '@clockwork/hooks';
+import { getHookUnique } from '@clockwork/hooks';
 import { findClass, getClass } from '@clockwork/common';
+import { always } from '@clockwork/hooks/dist/addons.js';
 
 const className = 'com.google.in.MemoryTrustManager';
 const dexBytes = [
@@ -82,16 +83,16 @@ function injectSsl() {
         },
     });
     uniqHook('okhttp3.CertificatePinner', 'check', {
-        replace: Addons.always(true),
+        replace: always(true),
     });
     uniqHook('com.android.org.conscrypt.TrustManagerImpl', 'verifyChain', {
         replace: (_, ...params) => params[0],
     });
     uniqHook('com.datatheorem.android.trustkit.pinning.OkHostnameVerifier', 'verify', {
-        replace: Addons.always(true),
+        replace: always(true),
     });
     uniqHook('appcelerator.https.PinningTrustManager', 'checkServerTrusted', {
-        replace: Addons.always(null),
+        replace: always(null),
     });
 }
 

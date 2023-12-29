@@ -1,4 +1,4 @@
-import { ClassesProxy as Classes } from './define/java.js';
+import { ClassesProxy as Classes, ClassesString } from './define/java.js';
 import { LibcFinderProxy } from './define/libc.js';
 import * as Std from './define/std.js';
 import { enumerateMembers, findClass, getClass } from './search.js';
@@ -24,4 +24,4 @@ Object.defineProperties(global, {
 })
 
 
-export { Classes, LibcFinderProxy as Libc, isJWrapper, stacktrace, findClass, getClass, enumerateMembers, Text, Std };
+export { Classes, ClassesString, LibcFinderProxy as Libc, isJWrapper, stacktrace, findClass, getClass, enumerateMembers, Text, Std };

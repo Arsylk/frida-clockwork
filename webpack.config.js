@@ -1,9 +1,9 @@
 import { resolve } from 'path';
 
 export default {
-    entry: './agent/justdump.ts',
+    entry: './agent/index.ts',
     output: {
-        filename: 'justdump.js',
+        filename: 'script.js',
         path: resolve('./agent/dist'),
     },
     module: {

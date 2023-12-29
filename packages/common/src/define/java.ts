@@ -26,6 +26,7 @@ const ClassesString = {
     TimeZone: 'java.util.TimeZone',
 
     Application: 'android.app.Application',
+    Settings$Secure: 'android.provider.Settings$Secure',
     WebView: 'android.webkit.WebView',
     ContentResolver: 'android.content.ContentResolver',
     WebChromeClient: 'android.webkit.WebChromeClient',
@@ -35,12 +36,16 @@ const ClassesString = {
     Intent: 'android.content.Intent',
     Activity: 'android.app.Activity',
     SharedPreferences: 'android.content.SharedPreferences',
+    SharedPreferencesImpl: 'android.app.SharedPreferencesImpl',
     PackageManager: 'android.content.pm.PackageManager',
     TelephonyManager: 'android.telephony.TelephonyManager',
     Build: 'android.os.Build',
+    InstallReferrerClient: 'com.android.installreferrer.api.InstallReferrerClient',
+    InstallReferrerStateListener: 'com.android.installreferrer.api.InstallReferrerStateListener',
+    ReferrerDetails: 'com.android.installreferrer.api.ReferrerDetails',
 };
 
 type ClassesType = PropertyJavaUseMapper<typeof ClassesString>;
 const ClassesProxy: ClassesType = proxyJavaUse(ClassesString);
 
-export { ClassesType, ClassesProxy };
+export { ClassesType, ClassesProxy, ClassesString };

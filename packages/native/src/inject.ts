@@ -3,7 +3,7 @@ const { blue, red, magentaBright: pink } = Color.use();
 
 type NatveFunctionCallbacks = {
     onEnter?: (this: InvocationContext, args: InvocationArguments) => void;
-    onLeave?: (this: InvocationContext, retval: NativeFunctionReturnValue) => void;
+    onLeave?: (this: InvocationContext, retval: InvocationReturnValue) => void;
 };
 
 // using namespace for singleton with all callbacks
@@ -54,10 +54,10 @@ namespace Inject {
         detach: () => void,
     ) => ({
         onEnter(args) {
-            logger.debug('[Ctor]', libName, red('->'), args[0]);
+            logger.info({ tag: 'ctor' }, `${libName} ${red('->')} ${args[0]}`);
         },
         onLeave(retval) {
-            logger.debug('[Ctor]', libName, blue('<-'), retval);
+            logger.info({ tag: 'ctor' }, `${libName} ${blue('<-')} ${retval}`);
             detach();
         },
     });
@@ -90,7 +90,8 @@ namespace Inject {
         address: NativePointer,
         callbacks: NatveFunctionCallbacks,
     ): void {
-        const fn = typeof nameOrPredicate === 'function' ? nameOrPredicate : (ptr: NativePointer) => modules.findName(ptr) === nameOrPredicate;
+        const fn =
+            typeof nameOrPredicate === 'function' ? nameOrPredicate : (ptr: NativePointer) => modules.findName(ptr) === nameOrPredicate;
         Interceptor.attach(address, {
             onEnter(args) {
                 if (fn(this.returnAddress)) {
@@ -105,11 +106,10 @@ namespace Inject {
         });
     }
 
-
     /** very useful for not hooking hardware, chrome, and other things you that cause crashes */
     export function isWithinOwnRange(ptr: NativePointer): boolean {
         const path = modules.findPath(ptr);
-        return path?.includes('/data') === true
+        return path?.includes('/data') === true;
     }
 }
 
