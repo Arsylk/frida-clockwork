@@ -1,1 +1,0 @@
-/opt/github/frida-clockwork/agent/dist/script.js

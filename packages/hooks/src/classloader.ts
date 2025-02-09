@@ -4,6 +4,8 @@ import { hook } from './hook.js';
 type Listener = (classLoader: Java.Wrapper | null) => void;
 
 namespace ClassLoader {
+    export let autorun = true;
+
     const listeners: Listener[] = [];
     export function perform(fn: Listener) {
         listeners.push(fn);
@@ -49,7 +51,7 @@ namespace ClassLoader {
         notify(null);
     }
 
-    setImmediate(() => Java.performNow(invoke));
+    autorun && setImmediate(() => Java.performNow(invoke));
 }
 
 export { ClassLoader };

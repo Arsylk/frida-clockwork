@@ -1,7 +1,8 @@
-import { Classes, ClassesString, Text, isNully, vs } from '@clockwork/common';
+import { Classes, ClassesString, Text, isNully, tryNull, vs, emitter } from '@clockwork/common';
 import { Consts } from '@clockwork/common';
 import { Color, logger as gLogger, subLogger } from '@clockwork/logging';
-import { addressOf } from '@clockwork/native';
+import { addressOf, previousReturn } from '@clockwork/native';
+import { fbase64, ProcMaps } from '@clockwork/cmodules';
 import {
     EnvWrapper,
     type JniDefinition,
@@ -45,6 +46,9 @@ function ColorMethodInvoke(method: JavaMethod, args: string[]): string {
     }
 
     switch (method.className) {
+        case 'android.view.MotionEvent':
+            isMultiline = method.name in ['getHistoricalAxisValue', 'getAxisValue'];
+            break;
         case 'com.android.internal.policy.PhoneWindow':
             isMultiline = method.name in ['setStatusBarColor'];
             break;
@@ -59,6 +63,24 @@ function ColorMethodInvoke(method: JavaMethod, args: string[]): string {
             break;
         case 'org.cocos2dx.lib.Cocos2dxBitmap':
             isMultiline = method.name in ['createTextBitmapShadowStroke'];
+            break;
+        case 'com.cocos.lib.CocosDownload':
+            isMultiline = method.name in ['createDownloader'];
+            break;
+        case 'org.egret.runtime.core.AndroidNativePlayer':
+            isMultiline = method.name in ['emit'];
+            break;
+        case 'org.egret.runtime.component.label.TextBitmap':
+            isMultiline = method.name in ['init', 'generateTextBitmapData', 'getTextWitdth'];
+            break;
+        case 'android.view.ViewGroup':
+            isMultiline = method.name in ['addView'];
+            break;
+        case 'android.widget.LinearLayout$LayoutParams':
+        case 'android.animation.PropertyValuesHolder':
+        case 'android.animation.ObjectAnimator':
+        case 'android.widget.FrameLayout$LayoutParams':
+            isMultiline = false;
             break;
     }
     const nl = isMultiline ? '\n' : '';
@@ -142,27 +164,25 @@ let envWrapper: EnvWrapper;
 function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) => boolean, full: boolean) {
     envWrapper ??= new EnvWrapper(Java.vm.getEnv());
 
-    false &&
-        repl(envWrapper, JNI.GetStringUTFChars, function (retval, env, str, smth) {
-            if (!predicate(this) || isNully(retval)) return;
+    repl(envWrapper, JNI.GetStringUTFChars, function (retval, env, str, smth) {
+        if (!predicate(this) || isNully(retval)) return;
 
-            const msg = Color.string(retval.readCString());
-            gLogger.info(`[${dim('GetStringUTFChars')}] ${msg}`);
-        });
-    false &&
-        repl(envWrapper, JNI.NewStringUTF, function (retval, env, str) {
-            if (!predicate(this) || isNully(str)) return;
-            const text = str.readCString();
-            switch (text) {
-                case 'com/cocos/lib/CocosHelper':
-                case 'org/cocos2dx/lib/CanvasRenderingContext2DImpl':
-                case 'com/cocos/lib/CanvasRenderingContext2DImpl':
-                    return;
-            }
+        const msg = Color.string(retval.readCString());
+        gLogger.info(`[${dim('GetStringUTFChars')}] ${msg}`);
+    });
+    repl(envWrapper, JNI.NewStringUTF, function (retval, env, str) {
+        if (!predicate(this) || isNully(str)) return;
+        const text = str.readCString();
+        switch (text) {
+            case 'com/cocos/lib/CocosHelper':
+            case 'org/cocos2dx/lib/CanvasRenderingContext2DImpl':
+            case 'com/cocos/lib/CanvasRenderingContext2DImpl':
+                return;
+        }
 
-            const msg = Color.string(text);
-            gLogger.info(`[${dim('NewStringUTF')}] ${msg} ${addressOf(this.returnAddress)}`);
-        });
+        const msg = Color.string(text);
+        gLogger.info(`[${dim('NewStringUTF')}] ${msg} ${this.prevRet()}`);
+    });
     repl(envWrapper, JNI.FindClass, function (retval, env, str) {
         if (!predicate(this) || isNully(str)) return;
 
@@ -178,10 +198,12 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
             return;
         }
         switch (typeName) {
+            case 'com.android.org.conscrypt.OpenSSLX509Certificate':
             case 'android.media.MediaRouter$RouteInfo':
             case 'android.view.Display':
-            case 'android.media.AudioDeviceInfo:':
                 return;
+            default:
+                if (typeName.includes('android.media.AudioDeviceInfo')) return;
         }
 
         const type = Text.toPrettyType(typeName);
@@ -250,6 +272,14 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
         const msg = GetFieldText(retval, env, clazz, name, sig);
         if (!msg) return;
         gLogger.info(`[${dim('GetStaticFieldID')}] ${msg}`);
+
+        const fen = `${name.readCString()}`;
+        if (fen === 'BRAND' || fen === 'MANUFACTURER' || fen === 'DISPLAY') {
+            const SetStaticObjectField = asFunction(env, JNI.SetStaticObjectField);
+            const NewStringUTF = asFunction(env, JNI.NewStringUTF);
+            const newString = NewStringUTF(env, Memory.allocUtf8String(fen));
+            SetStaticObjectField(env, clazz, retval, newString);
+        }
     });
 
     repl(envWrapper, JNI.DefineClass, function (retval, env, name, obj, bytes, size) {
@@ -289,6 +319,12 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
         const refClass = !isNully(retval) ? getObjectClass(env, retval) : null;
         const typeName = refClass ? Java.cast(refClass, Classes.Class).getName() : null;
         const type = typeName ? Text.toPrettyType(typeName) : null;
+
+        switch (type) {
+            case 'com.android.org.conscrypt.OpenSSLX509Certificate':
+            case 'android.media.AudioDeviceInfo':
+                return;
+        }
 
         const value = vs(retval, type ?? undefined, env);
         const msg = `${type ?? jarray}[${i}] ${value}`;
@@ -412,6 +448,7 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
         JNI.CallNonvirtualVoidMethodV,
         JNI.NewObject,
         JNI.NewObjectA,
+
         JNI.NewObjectV,
     ];
     for (const j of CallObjects) {
@@ -425,6 +462,18 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                 : JniInvokeMode.Normal;
         const cb = JniInvokeCallbacks(envWrapper, j, mode, predicate, {
             onEnter({ method, env, methodID, jArgs }) {
+                if (
+                    ((method?.className === 'android.content.res.AssetManager$AssetInputStream' ||
+                        method?.className === 'java.io.FilterInputStream' ||
+                        method?.className === 'java.io.InputStream' ||
+                        method?.className === 'java.io.FileOutputStream' ||
+                        method?.className === 'java.io.ByteArrayOutputStream') &&
+                        (method.name === 'read' || method.name === 'write')) ||
+                    (method?.name === 'nanoTime' && method?.className === 'java.lang.System')
+                ) {
+                    this.ignore = true;
+                    return;
+                }
                 const msg = formatCallMethod(env, methodID, method, jArgs);
                 if (method?.className === ClassesString.ClassLoader && method?.name === 'loadClass') {
                     for (const skip of [
@@ -473,8 +522,15 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                         this.ignore = method?.name === 'getDevices';
                         if (this.ignore) return;
                         break;
+                    case 'java.security.cert.Certificate':
+                        this.ignore = method?.name === 'getEncoded';
+                        if (this.ignore) return;
+                        break;
                 }
-                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(this.returnAddress)}`);
+
+                gLogger.info(
+                    `[${dim(name)}] ${msg} ${addressOf(previousReturn(this.returnAddress as any, 2)) ?? ''}`,
+                );
             },
             onLeave({ env, method, obj, jArgs }, retval) {
                 if (this.ignore || method?.isVoid) return;
@@ -497,11 +553,16 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                 //    ];
                 //    // retval.replace(ptr(offs[0]));
                 //}
+
+                if (method?.name === 'decode') {
+                    //ProcMaps.printStacktrace(this.context);
+                    //const msg = Thread.backtrace(this.context, Backtracer.FUZZY).map((x) => addressOf(x));
+                }
                 //if (method?.className === ClassesString.String && method?.name === 'contains') {
                 //    logger.info({ tag: 'contains' }, `${Java.cast(obj as NativePointer, Classes.String)}`);
                 //}
                 const msg = formatMethodReturn(env, retval, method?.returnType);
-                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(this.returnAddress)}`);
+                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(this.returnAddress as any)}`);
             },
         });
         Interceptor.attach(address, cb);
@@ -512,20 +573,21 @@ function repl<T extends NativeFunctionReturnType, R extends [] | NativeFunctionA
     envWrapper: EnvWrapper,
     def: JniDefinition<T, R>,
     log: (
-        this: InvocationContext | CallbackContext,
+        this: (InvocationContext | CallbackContext) & { prevRet: () => any },
         retval: mFunctionReturn<T>,
         ...args: mFunctionParameters<R>
     ) => void,
 ) {
     const fn = envWrapper.getFunction<T, R>(def);
     const cb: NativeCallbackImplementation<any, any> = function (
-        this,
+        this: (InvocationContext | CallbackContext) & { prevRet: () => any },
         ...args: mFunctionParameters<R>
     ): mFunctionReturn<T> {
         const retval: mFunctionReturn<T> = fn(...args);
+        this.prevRet = () => addressOf(previousReturn(this.context as Arm64CpuContext));
         log.call(this, retval, ...args);
         return retval;
-    };
+    } as any;
     Interceptor.replace(
         fn,
         new NativeCallback(

@@ -1,6 +1,6 @@
 import { Std, Text } from '@clockwork/common';
 import { Color, subLogger } from '@clockwork/logging';
-import { Inject, addressOf, dumpFile } from '@clockwork/native';
+import { Inject, addressOf, dumpFile, log } from '@clockwork/native';
 import { createHash } from 'crypto';
 const { dim } = Color.use();
 const logger = subLogger('cocos2dx');
@@ -305,4 +305,30 @@ function dump(...targets: Cocos2dxOffset[]) {
     });
 }
 
-export { dump };
+function replace(address: NativePointer, libname: string) {
+    let isDone = false;
+    Inject.afterInitArrayModule((module: Module) => {
+        if (module.name === libname && !isDone) {
+            const ptr = module.base.add(address);
+            Interceptor.attach(ptr, {
+                onEnter(this, args) {
+                    const data = `${args[1].readCString()}`;
+
+                    for (
+                        let pos = 0, ind = 0;
+                        (ind = data.indexOf('isCashGame = 2 == t', pos)) > 0;
+                        pos += ind + 1
+                    ) {
+                        //@ts-ignore
+                        const newby = File.readAllBytes('/data/data/net.fierce.poker.arena/files/sample');
+                        args[1] = newby;
+                        args[3] = newby.length;
+                    }
+                },
+            });
+            isDone = true;
+        }
+    });
+}
+
+export { dump, replace };

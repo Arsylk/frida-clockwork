@@ -32,12 +32,12 @@ class JavaMethod {
     }
 
     public get isConstructor(): boolean {
-        return this.name === '<init>' && this.isVoid
+        return this.name === '<init>' && this.isVoid;
     }
 }
 
 class JavaField {
-    #jType: string | null =  null;
+    #jType: string | null = null;
     #jClassName: string | null = null;
     public constructor(
         public readonly className: string,
@@ -55,7 +55,6 @@ class JavaField {
     }
 }
 
-
 const Methods = {
     storage: new Map<string, JavaMethod>(),
     staticStorage: new Map<string, JavaMethod>(),
@@ -63,35 +62,33 @@ const Methods = {
         return (isStatic ? this.staticStorage : this.storage)[`${jMethodId}`] ?? null;
     },
     set(jMethodId: jMethodID, isStatic: boolean, method: JavaMethod): JavaMethod {
-        return (method.isStatic ? this.staticStorage : this.storage)[`${jMethodId}`] = method;
+        return ((method.isStatic ? this.staticStorage : this.storage)[`${jMethodId}`] = method);
     },
-} as Cachable<JavaMethod, jMethodID>
+} as Cachable<JavaMethod, jMethodID>;
 
 const Fields = {
     storage: new Map<number, JavaField>(),
     staticStorage: new Map<number, JavaField>(),
     get(jFieldId: jFieldID, isStatic: boolean): JavaField | null {
-        const key = typeof jFieldId === 'number' ? jFieldId : jFieldId.toInt32()
+        const key = typeof jFieldId === 'number' ? jFieldId : jFieldId.toInt32();
         return (isStatic ? this.staticStorage : this.storage)[key] ?? null;
     },
     set(jFieldId: jFieldID, isStatic: boolean, method: JavaField): JavaField {
-        const key = typeof jFieldId === 'number' ? jFieldId : jFieldId.toInt32()
-        return (method.isStatic ? this.staticStorage : this.storage)[key] = method;
+        const key = typeof jFieldId === 'number' ? jFieldId : jFieldId.toInt32();
+        return ((method.isStatic ? this.staticStorage : this.storage)[key] = method);
     },
-} as Cachable<JavaField, jFieldID>
+} as Cachable<JavaField, jFieldID>;
 
 type Cachable<T, R> = {
     get(key: R, isStatic: boolean): T | null;
-    set(key: R, isStatuc: boolean, value: T): T
-}
-
+    set(key: R, isStatuc: boolean, value: T): T;
+};
 
 class JNIMethod {
     constructor(
         public readonly name: string,
-        public readonly address: NativePointer
+        public readonly address: NativePointer,
     ) {}
 }
 
 export { Fields, JavaField, JavaMethod, JniInvokeMode, JNIMethod, Methods, type Cachable };
-

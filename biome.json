@@ -32,7 +32,8 @@
             "recommended": true,
             "suspicious": {
                 "noAssignInExpressions": "off",
-                "noExplicitAny": "off"
+                "noExplicitAny": "off",
+                "noConfusingVoidType": "off"
             },
             "complexity": {
                 "useArrowFunction": "info"
@@ -44,12 +45,17 @@
                     "level": "warn",
                     "fix": "safe"
                 }
+            },
+            "correctness": {
+                "noUnreachable": {
+                    "level": "warn"
+                }
             }
         }
     },
     "files": {
         "ignore": ["dist/**", "node_modules/**"],
-        "include": ["*.ts", "*.js", "*.json"],
+        "include": ["*.ts", "*.js"],
         "maxSize": 10485760
     }
 }

@@ -1,14 +1,15 @@
 import { Color, logger, subLogger } from '@clockwork/logging';
-import { Libc } from '../index.js';
+import { Libc, tryNull } from '../index.js';
+import { isNully } from '../index.js';
 import { stringify } from '../text.js';
 import { Linker as LinkerStruct } from './struct.js';
-import { isNully } from '../index.js';
 import { SYSCALLS } from './syscalls.js';
 const { soinfo } = LinkerStruct;
 const { red, gray, dim } = Color.use();
 
 let _dl_solist_get_head = NULL;
 let soinfo_get_soname = NULL;
+let soinfo_get_realpath = NULL;
 
 const linker = Process.getModuleByName('linker64');
 const syms = linker.enumerateSymbols();
@@ -22,7 +23,14 @@ for (const i in syms) {
         case '__dl__ZNK6soinfo10get_sonameEv':
             soinfo_get_soname = sym.address;
             break;
+        case '__dl__ZNK6soinfo12get_realpathEv':
+            soinfo_get_realpath = sym.address;
+            break;
     }
+}
+
+if (`${soinfo_get_soname}` === '0x0') {
+    soinfo_get_soname = new NativeCallback((ptr: NativePointer) => ptr.readPointer(), 'pointer', ['pointer']);
 }
 
 namespace Linker {
@@ -51,7 +59,8 @@ namespace Linker {
         while (item) {
             const name = item.getName();
             const next = item.getNext();
-            if (_predicate(name) && predicate?.(name) !== false) {
+            logger.info({ tag: name }, `${next}`);
+            if (_predicate(name) || predicate?.(name) === true) {
                 prev?.setNext(next);
                 skip.push(name);
             }
@@ -81,7 +90,11 @@ namespace Linker {
 
 class SoInfo {
     static #getSoName = new NativeFunction(soinfo_get_soname, 'pointer', ['pointer']);
+    static #getRealpath = new NativeFunction(soinfo_get_realpath, 'pointer', ['pointer']);
 
+    get ptr(): NativePointer {
+        return this.#struct.ptr;
+    }
     #struct: ReturnType<typeof soinfo>;
     constructor(ptr: NativePointer) {
         this.#struct = soinfo(ptr);
@@ -100,7 +113,12 @@ class SoInfo {
     }
 
     getName(): string {
-        const ptr = SoInfo.#getSoName(this.#struct.ptr);
+        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
+        return `${ptr.readCString()}`;
+    }
+
+    getRealpath(): string {
+        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
         return `${ptr.readCString()}`;
     }
 
@@ -480,8 +498,10 @@ let sysThread = NULL;
 type SyscallParams = {
     onBefore?: (context: Arm64CpuContext, num: number) => void;
     onAfter?: (context: Arm64CpuContext, num: number) => void;
+    logging?: boolean;
 };
 function hookException(nums: number[], params: SyscallParams) {
+    const rawargs = Memory.alloc(7 * Process.pointerSize);
     sysThread = CM_pthread_syscall_create();
     Process.setExceptionHandler((details) => {
         const offset = details.context.pc.sub(0x4);
@@ -494,13 +514,13 @@ function hookException(nums: number[], params: SyscallParams) {
             const num = (details.context as Arm64CpuContext).x8.toInt32();
             // store current registers
             const args: NativePointer[] = new Array(6);
-            const rawargs = Memory.alloc(7 * Process.pointerSize);
             rawargs.writePointer((details.context as Arm64CpuContext).x8);
             for (let i = 0; i < 6; i += 1) {
                 args[i] = Reflect.get(details.context, `x${i}`);
                 rawargs.add((i + 1) * Process.pointerSize).writePointer(args[i]);
             }
-            logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
+            if (params.logging === true)
+                logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
 
             params.onBefore?.(details.context as Arm64CpuContext, num);
             const retval = CM_enqueue_task(sysThread, rawargs, 0);

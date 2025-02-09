@@ -2,6 +2,7 @@
     "compilerOptions": {
         "lib": [
             "ESNext"
-        ]
+        ],
+        "noImplicitAny": false
     }
 }

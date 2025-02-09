@@ -2,6 +2,7 @@ import { JNI, asFunction, asLocalRef } from '@clockwork/jnitrace';
 import { Color } from '@clockwork/logging';
 import { ClassesString } from './define/java.js';
 import { toHex } from './text.js';
+import { JavaPrimitive } from './define/consts.js';
 const { black, gray, red, green, orange, dim, italic, bold, yellow, hidden } = Color.use();
 
 function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv()?.handle): string {
@@ -10,34 +11,7 @@ function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv
 
     //loop over array until max length
     if (type?.endsWith('[]')) {
-        const baseType = type.replace(/[\\[\\]]/g, '');
-        const itemType = type.substring(0, type.length - 2);
-        const items: string[] = [];
-        let getItem = (i: number) => value[i];
-        let size = value.size ?? value.length;
-
-        // native pointer to array only
-        if (!size) {
-            const mPointer = value.$h ?? value;
-            if (mPointer instanceof NativePointer) {
-                const GetArrayItem = asFunction(jniEnv, JNI.GetObjectArrayElement);
-                size = asFunction(jniEnv, JNI.GetArrayLength)(jniEnv, mPointer);
-                getItem = (i: number) => vs(GetArrayItem(jniEnv, mPointer, i), itemType, jniEnv);
-            }
-        }
-
-        let messageSize = 0;
-        for (let i = 0; i < size; i += 1) {
-            const mapped = `${getItem(i)}`;
-            items.push(mapped);
-            messageSize += mapped.length;
-            if ((messageSize > 200 || i >= 16) && i + 1 < size) {
-                items.push(gray(' ... '));
-                break;
-            }
-        }
-        if (items.length === 0) return black('[]');
-        return `${black('[')} ${items.join(black(', '))} ${black(']')}`;
+        return visualizeArray(value, type, jniEnv);
     }
 
     // select by provided type
@@ -59,7 +33,7 @@ function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv
             return Color.number(strShort(value));
         }
         case 'int': {
-            return Color.number(ptr(value).toInt32());
+            return Color.number(`${Number(value)}`);
         }
         case 'float': {
             //@ts-ignore
@@ -67,9 +41,22 @@ function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv
             return Color.number(strFloat(Number(value)));
         }
         case 'double': {
+            function swapEndian64(num: bigint) {
+                return (
+                    ((num & 0xff0000000000000n) >> 56n) |
+                    ((num & 0x00ff00000000000n) >> 40n) |
+                    ((num & 0x0000ff000000000n) >> 24n) |
+                    ((num & 0x000000ff0000000n) >> 8n) |
+                    ((num & 0x00000000ff00000n) << 8n) |
+                    ((num & 0x0000000000ff000n) << 24n) |
+                    ((num & 0x000000000000ff0n) << 40n) |
+                    ((num & 0x00000000000000fn) << 56n)
+                );
+            }
+            const little = typeof value === 'object' ? Number(swapEndian64(BigInt(value))) : Number(value);
             //@ts-ignore
-            const strDoubke = Classes.String.valueOf.overload('double').bind(Classes.String);
-            return Color.number(strDoubke(value));
+            const strFloat = Classes.String.valueOf.overload('float').bind(Classes.String);
+            return Color.number(strFloat(little));
         }
         case 'long':
             return Color.number(`${new Int64(value.toString())}`);
@@ -86,6 +73,7 @@ function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv
             return Color.number(value);
     }
 
+    // JNI.CallStaticObjectMethodV,
     // * should only have java objects in here
     const classHandle = value.$h ?? value;
     if (classHandle) {
@@ -98,16 +86,80 @@ function vs(value: any, type?: string, jniEnv: NativePointer = Java.vm.tryGetEnv
         }
 
         if (classHandle) {
-            const text =
-                handleStr.length === 12
-                    ? asLocalRef(jniEnv, classHandle, (ptr: NativePointer) => visualObject(ptr, type))
-                    : visualObject(classHandle, type);
-            if (text) return text;
+            if (handleStr.length !== 12) {
+                let text: string | null = null;
+                try {
+                    const NewLocalRef = asFunction(jniEnv, JNI.NewLocalRef);
+                    const local = NewLocalRef(jniEnv, classHandle);
+                    local.readByteArray(8);
+                    text = visualObject(local, type);
+                    const DeleteLocalRef = asFunction(jniEnv, JNI.DeleteLocalRef);
+                    DeleteLocalRef(jniEnv, local);
+                } catch {
+                    try {
+                        text = visualObject(classHandle, type);
+                    } catch {
+                        text = black(`${value}`);
+                    }
+                }
+                if (text) return text;
+            } else {
+                const text = visualObject(classHandle, type);
+                if (text) return text;
+            }
         }
 
         return black(`${value}`);
     }
     return red(`${value}`);
+}
+
+function visualizeArray(value: any, type: string, jniEnv: NativePointer): string {
+    const baseType = type.replace(/[\\[\\]]/g, '');
+    const itemType = type.substring(0, type.length - 2);
+    let getItem = (i: number) => value[i];
+    let size = value.size ?? value.length;
+
+    // native pointer to array only
+    if (!size) {
+        const mPointer = value.$h ?? value;
+        if (mPointer instanceof NativePointer) {
+            size = asFunction(jniEnv, JNI.GetArrayLength)(jniEnv, mPointer);
+            switch (JavaPrimitive[baseType]) {
+                case undefined: {
+                    const GetArrayItem = asFunction(jniEnv, JNI.GetObjectArrayElement);
+                    getItem = (i: number) => vs(GetArrayItem(jniEnv, mPointer, i), itemType, jniEnv);
+                    break;
+                }
+                case 'C': {
+                    const elems = asFunction(jniEnv, JNI.GetCharArrayElements)(jniEnv, mPointer, ptr(0x0));
+                    getItem = (i: number) => Color.char(String.fromCharCode(elems.add(i * 2).readU16()));
+                    break;
+                }
+                case 'I': {
+                    const elems = asFunction(jniEnv, JNI.GetCharArrayElements)(jniEnv, mPointer, ptr(0x0));
+                    getItem = (i: number) => Color.number(String.fromCharCode(elems.add(i * 4).readS32()));
+                    break;
+                }
+                default:
+                    return `${value}`;
+            }
+        }
+    }
+
+    const items: string[] = [];
+    let messageSize = 0;
+    for (let i = 0; i < size; i += 1) {
+        const mapped = `${getItem(i)}`;
+        items.push(mapped);
+        messageSize += mapped.length;
+        if ((messageSize > 200 || i >= 16) && i + 1 < size) {
+            items.push(gray(' ... '));
+            break;
+        }
+    }
+    if (items.length === 0) return black('[]');
+    return `${black('[')} ${items.join(black(', '))} ${black(']')}`;
 }
 
 function visualObject(value: NativePointer, type?: string): string {

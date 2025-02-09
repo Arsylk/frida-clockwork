@@ -9,4 +9,7 @@ CompileFlags:
         "-pie",
         "-Wall",
         "-Iinclude",
+        "-I/opt/github/frida-gum/",
+        "-I/opt/github/frida-gum/gum/backend-linux/include/",
+        "-I/opt/github/frida-gum/gum/backend-libunwind/include/",
   ]

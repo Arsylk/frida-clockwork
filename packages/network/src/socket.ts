@@ -1,5 +1,7 @@
 import { Libc } from '@clockwork/common';
-import { subLogger } from '@clockwork/logging';
+import { Color, subLogger } from '@clockwork/logging';
+import * as Native from '@clockwork/native';
+const { black, gray, red, green, orange, dim, italic, bold, yellow, hidden } = Color.use();
 const logger = subLogger('socket');
 
 type ProcessID = number;
@@ -114,20 +116,28 @@ function attachNativeSocket() {
     });
 }
 
+function formatFd(fd: number) {
+    const target = Native.readFdPath(fd);
+    if (target) {
+        return `${fd} -> ${gray(`${target}`)}`;
+    }
+    return `${fd}`;
+}
+
 function logOpen(msg: SocketOpenMessage) {
     const host = `${msg.hostIp?.replace('::ffff:', '')}${String(msg.port ? `:${msg.port}` : '')}`;
     const dest = msg.dstIp
         ? `, dst@${msg.dstIp.replace('::ffff:', '')}${String(msg.dstPort ? `:${msg.dstPort}` : '')}`
         : '';
     logger.info(
-        `(pid: ${msg.pid}, thread: ${msg.threadId}, fd: ${msg.socketFd}) ${msg.type} -> [host@${host}${dest}]`,
+        `(pid: ${msg.pid}, thread: ${msg.threadId}, fd: ${formatFd(msg.socketFd)}) ${msg.type} -> [host@${host}${dest}]`,
     );
 }
 
 function logClose(msg: SocketCloseMessage) {
     const host = `${msg.hostIp?.replace('::ffff:', '')}${String(msg.port ? `:${msg.port}` : '')}`;
     const thread = msg.threadId ? `, thread: ${msg.threadId}` : '';
-    logger.info(`(pid: ${msg.pid}${thread}, fd: ${msg.socketFd}) ${msg.type} -> ${host}`);
+    logger.info(`(pid: ${msg.pid}${thread}, fd: ${formatFd(msg.socketFd)}) ${msg.type} -> ${host}`);
 }
 
 export { attachNativeSocket };

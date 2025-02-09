@@ -100,6 +100,7 @@ export {
     emitter,
     enumerateMembers,
     findClass,
+    findChoose,
     getApplicationContext,
     getFindUnique,
     isJWrapper,

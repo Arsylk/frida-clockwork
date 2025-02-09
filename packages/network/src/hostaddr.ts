@@ -25,7 +25,15 @@ function attachGetAddrInfo(detailed = false) {
         },
         onLeave(retval) {
             const resInt = retval.toUInt32();
-            const text = !this.port || this.port === 'null' ? `${this.host}` : `${this.host}:${this.port}`;
+            const port = `${this.port}`;
+            let text = `${this.host}`;
+            if (port && port !== 'null') {
+                if (port.match(/[0-9]+/)) {
+                    text = `${text}:${port}`;
+                } else {
+                    text = `${port}://${text}`;
+                }
+            }
             const result = resInt === 0x0 ? 'success' : 'failure';
             logger.info(
                 { tag: 'getaddrinfo' },
@@ -60,7 +68,7 @@ function attachGetAddrInfo(detailed = false) {
     });
 }
 
-function attachInteAton() {
+function attachInetAton() {
     Interceptor.attach(Libc.inet_aton, {
         onEnter(args) {
             this.addr = args[0].readCString();
@@ -69,6 +77,14 @@ function attachInteAton() {
             logger.info({ tag: 'inet_aton' }, `${this.addr} -> ${retval} ${addressOf(this.returnAddress)}`);
         },
     });
-}
 
-export { attachGetAddrInfo, attachGetHostByName, attachInteAton };
+    Interceptor.attach(Libc.inet_addr, {
+        onEnter(args) {
+            this.addr = args[0].readCString();
+        },
+        onLeave(retval) {
+            logger.info({ tag: 'inet_addr' }, `${this.addr} -> ${retval} ${addressOf(this.returnAddress)}`);
+        },
+    });
+}
+export { attachGetAddrInfo, attachGetHostByName, attachInetAton as attachInteAton };

@@ -1,192 +1,56 @@
-import * as Anticloak from '@clockwork/anticloak';
-import { Text, emitter, getFindUnique, stacktrace, tryNull } from '@clockwork/common';
-import { initSoDump } from '@clockwork/dump';
+import { ProcMaps } from '@clockwork/cmodules';
+import { Text, emitter, getFindUnique, isNully, stacktrace, tryNull } from '@clockwork/common';
 import { getHookUnique } from '@clockwork/hooks';
-import * as JniTrace from '@clockwork/jnitrace';
 import { Color, logger } from '@clockwork/logging';
-import * as Native from '@clockwork/native';
-import { predicate } from '@clockwork/native';
-import { getSelfProcessName } from '@clockwork/native/dist/utils';
-const { red } = Color.use();
 const uniqHook = getHookUnique(true);
 const uniqFind = getFindUnique(false);
-
-Java.performNow(Anticloak.hookPackageManager);
-
-//let start = !true;
-//JniTrace.attach((thisRef) => predicate(thisRef.returnAddress), false);
-//setTimeout(() => (start = !true), 8000);
-//emitter.on('jni', () => (start = !start));
-
-Native.Files.hookFopen(predicate, true, (path) => {
-    if (path === '/proc/self/maps' || path === `/proc/${Process.id}/maps` || path?.endsWith('/smaps')) {
-        return `/data/data/${getSelfProcessName()}/files/fake_maps`;
-    }
-    if (path?.includes('magisk')) {
-        return path.replace(/magisk/, 'nya');
-    }
-    if (path?.endsWith('/su')) {
-        return path.replace(/\/su$/, '/nya');
-    }
-});
-
-Native.Strings.hookStrstr(predicate);
-//Native.Strings.hookStrlen(predicate);
-//Native.Strings.hookStrcpy(predicate);
-//Native.Strings.hookStrcmp(predicate);
-//Native.Strings.hookStrtoLong(predicate);
-Native.System.hookSystem();
-//Native.System.hookGetauxval();
-Native.System.hookPosixSpawn();
-//Native.Time.hookDifftime(predicate);
-//Native.Time.hookTime(predicate);
-//Native.Time.hookLocaltime(predicate);
-//Native.Time.hookGettimeofday(predicate);
-Native.Pthread.hookPthread_create({
-    after(threadId, returnAddress) {
-        if (predicate(returnAddress)) {
-            stalk(threadId, Process.getModuleByAddress(returnAddress));
+const clone = Module.findExportByName('libc.so', 'clone');
+Interceptor.attach(clone, {
+    onEnter: (args) => {
+        if (!isNully(args[3])) {
+            const addr = args[3].add(96).readPointer();
+            const so_name = Process.findModuleByAddress(addr).name;
+            const so_base = Module.getBaseAddress(so_name);
+            const offset = addr.sub(so_base);
+            console.log('===============>', so_name, addr, offset, offset.toString(16));
         }
     },
 });
-Native.Pthread.hookPthread_join();
-//Native.Logcat.hookLogcat(function (msg) {
-//    if (msg.includes('Kill Process')) {
-//        const stacktrace = Thread.backtrace(this.context, Backtracer.FUZZY)
-//            .map((x) => Native.addressOf(x, true))
-//            .join('\n\t');
-//        logger.info(stacktrace);
-//    }
-//});
 
-Anticloak.Debug.hookPtrace();
-
-//Interceptor.attach(Libc.sprintf, {
-//    onEnter(args) {
-//        this.dst = args[0];
-//    },
-//    onLeave(retval) {
-//        const text = this.dst.readCString();
-//        logger.info({ tag: 'sprintf' }, `${text}`);
-//    },
-//});
-//
-//Interceptor.attach(Libc.vsnprintf, {
-//    onEnter(args) {
-//        this.dst = args[0];
-//    },
-//    onLeave(retval) {
-//        if (predicate(this.returnAddress)) {
-//            const text = this.dst.readCString();
-//            logger.info({ tag: 'vsnprintf' }, `${text}`);
-//        }
-//    },
-//});
-Interceptor.replace(
-    Libc.fgets,
-    new NativeCallback(
-        function (buffer, size, fp) {
-            const retval = Libc.fgets(buffer, size, fp);
-            if (predicate(this.returnAddress)) {
-                const endUserMssg = buffer.readCString()?.trimEnd();
-                if (
-                    endUserMssg?.includes('KSU') ||
-                    endUserMssg?.includes('debug_ramdisk') ||
-                    endUserMssg?.includes('devpts') ||
-                    endUserMssg?.includes('magisk')
-                ) {
-                    logger.info({ tag: 'fgets' }, `${endUserMssg} ${red('SKIP')}`);
-                    return Libc.fgets(buffer, size, fp);
-                }
-                logger.info({ tag: 'fgets' }, `${endUserMssg}`);
+Interceptor.attach(Module.findExportByName(null, 'android_dlopen_ext'), {
+    onEnter: function (args) {
+        const pathptr = args[0];
+        if (pathptr !== undefined && pathptr != null) {
+            const path = pathptr.readCString();
+            // console.log(path)
+            if (path?.includes('libDexHelper')) {
+                this.match = true;
+                this.name = path;
             }
-            return retval;
-        },
-        'pointer',
-        ['pointer', 'int', 'pointer'],
-    ),
-);
-//Interceptor.replace(
-//    Libc.nanosleep,
-//    new NativeCallback(
-//        () => {
-//            //logger.info({ tag: 'nanosleep' }, `${Native.addressOf(this.returnAddress)}`);
-//            return 0;
-//        },
-//        'int',
-//        ['pointer', 'pointer'],
-//    ),
-//);
-
-Native.TheEnd.hook(predicate);
-let done = false;
-Native.Inject.afterInitArrayModule((module: Module) => {
-    logger.info({ tag: 'base' }, Text.stringify(module));
-    const { base, name, size } = module;
-    if (name === 'libreveny.so') {
-        if (!done) {
-            stalk(Process.getCurrentThreadId(), module);
-            Native.Files.hookOpen(predicate);
-            Native.Files.hookAccess(predicate);
-            Native.Files.hookReadlink(predicate);
-            Native.Files.hookDirent(predicate);
-            Native.Files.hookOpendir(predicate, (path) => {
-                if (
-                    (path?.startsWith('/proc') && (path?.endsWith('/task') || path?.endsWith('/fd'))) ||
-                    path?.endsWith('/sys/module') ||
-                    path?.endsWith('/system/priv-app')
-                )
-                    return '/dev/null';
-            });
-            Native.Files.hookStat(predicate);
-            Native.Files.hookRemove(predicate);
-
-            done = true;
         }
-    }
+    },
+    onLeave: function (retval) {
+        if (this.match) {
+            console.log(this.name, '加载成功');
+            const base = Module.findBaseAddress('libDexHelper.so');
+            patch_func_nop(base.add(0x44dd4));
+            patch_func_nop(base.add(0x4ec60));
+            patch_func_nop(base.add(0x4eef8));
+            patch_func_nop(base.add(0x32d08));
+        }
+    },
 });
-
-function stalk(pid: number, module: Module) {
-    const func_addr: { [key: string]: string } = {};
-    let times = 0;
-
-    Stalker.exclude(Process.getModuleByName('libc.so'));
-    Stalker.exclude(Process.getModuleByName('libart.so'));
-    Stalker.exclude(Process.getModuleByName('libartbase.so'));
-    Stalker.exclude(Process.getModuleByName('libnetd_client.so'));
-    Stalker.exclude(Process.getModuleByName('libdl.so'));
-    Stalker.exclude(Process.getModuleByName('libc++.so'));
-    Stalker.exclude(Process.getModuleByName('liblog.so'));
-    Stalker.exclude(Process.getModuleByName('boot.oat'));
-    Stalker.exclude(Process.getModuleByName('boot-framework.oat'));
-    Stalker.exclude(Process.getModuleByName('libandroidfw.so'));
-    Stalker.exclude(Process.getModuleByName('libselinux.so'));
-    Stalker.exclude(Process.getModuleByName('libopenjdkjvm.so'));
-    Stalker.exclude(Process.getModuleByName('libbase.so'));
-    Stalker.exclude(Process.getModuleByName('libandroid_runtime.so'));
-
-    Stalker.follow(pid, {
-        events: {
-            call: false,
-            ret: true,
-            exec: false,
-            block: false,
-            compile: false,
-        },
-        onReceive: (events: ArrayBuffer) => {},
-        transform: (iterator: StalkerArm64Iterator) => {
-            let instruction = iterator.next();
-            do {
-                if (instruction?.groups.includes('call')) {
-                    //@ts-ignore
-                    const value = tryNull(() => ptr(instruction.operands[0].value));
-                    logger.info({ tag: 'call' }, `${times}:${instruction} | ${value}`);
-                    times = times + 1;
-                }
-                iterator.keep();
-            } while ((instruction = iterator.next()) !== null);
-        },
-
-        onCallSummary: (summary) => {},
+function patch_func_nop(addr: NativePointer) {
+    Memory.patchCode(addr, 8, (code) => {
+        code.writeByteArray([0xe0, 0x03, 0x00, 0xaa]);
+        code.writeByteArray([0xc0, 0x03, 0x5f, 0xd6]);
+        console.log(`patch code at ${addr}`);
     });
 }
+
+Interceptor.attach(Module.findExportByName(null, 'dlsym'), {
+    onEnter: function (args) {
+        const name = args[1].readCString();
+        console.log('[dlsym]', name);
+    },
+});

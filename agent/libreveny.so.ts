@@ -1,4 +1,5 @@
 import * as Anticloak from '@clockwork/anticloak';
+import * as JniTrace from '@clockwork/jnitrace';
 import { Color, logger } from '@clockwork/logging';
 import * as Native from '@clockwork/native';
 import { Text, hookException, Linker } from '@clockwork/common';
@@ -8,12 +9,15 @@ const predicate: (ptr: NativePointer) => true | undefined = () => true;
 
 Native.attachSystemPropertyGet(predicate, (key) => {
     const value = Anticloak.BuildProp.propMapper(key);
+    // const chars = new Array(value.toString().length);
     return value;
 });
 
 Native.Files.hookFopen(predicate, true, (path) => {
     if (path?.endsWith('/su') || path?.endsWith('/mountinfo') || path?.endsWith('/maps')) {
-        return path.replace(/\/(su|mountinfo|maps)$/i, '/nya');
+        //@ts-ignore
+        Native.stalk(this.threadId, this.returnAddress);
+        // return path.replace(/\/(su|mountinfo|maps)$/i, '/nya');
     }
     if (
         path?.includes('magisk') ||

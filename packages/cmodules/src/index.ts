@@ -2,6 +2,7 @@ import { Libc } from '@clockwork/common';
 import { logger } from '@clockwork/logging';
 import _memcmp from '@src/memcmp.c';
 import _procmaps from '@src/procmaps.c';
+import _inject from '@src/inject.c';
 
 function base64(str: string) {
     const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -62,7 +63,7 @@ namespace ProcMaps {
         perror: Module.getExportByName(null, 'perror'),
         _Unwind_Backtrace: Module.getExportByName(null, '_Unwind_Backtrace'),
         _Unwind_GetIP: Module.getExportByName(null, '_Unwind_GetIP'),
-        dl_soinfo_get_soname: LinkerSym.__dl__ZNK6soinfo10get_sonameEv,
+        dl_soinfo_get_soname: LinkerSym.__dl__ZNK6soinfo12get_realpathEv,
         dl_solist_get_head: LinkerSym.__dl__Z15solist_get_headv,
         close: Libc.close,
         fclose: Libc.fclose,
@@ -78,8 +79,13 @@ namespace ProcMaps {
         dladdr: Libc.dladdr,
         __cxa_demangle: Libc.__cxa_demangle,
     });
+    const _get_backtrace = new NativeFunction(cm.get_backtrace, 'pointer', ['pointer']);
     const _addressOf = new NativeFunction(cm.addressOf, 'pointer', ['pointer']);
     const _isFridaAddress = new NativeFunction(cm.isFridaAddress, 'bool', ['pointer']);
+
+    export function backtraceOf(ptr: NativePointer): string {
+        return _get_backtrace(ptr).readCString() as string;
+    }
 
     export function addressOf(ptr: NativePointer): string {
         return _addressOf(ptr).readCString() as string;
@@ -99,42 +105,60 @@ namespace ProcMaps {
     }
 }
 
-namespace SvcHook {
-    const cm = new CModule('');
-    //@ts-ignore
-    const _svc_hook =
-        //@ts-ignore
-        cm === null ? new NativeFunction(cm.svc_hook as any, 'uint', ['uint', 'pointer', 'pointer']) : null;
+namespace Inject {
+    export const cm = new CModule(
+        `
+    void register_constructor_callback(void*data) {}
+`,
+        {
+            frida_log: get_frida_log('inject'),
+        },
+    );
+    const _registerCallback = new NativeFunction(cm.register_constructor_callback, 'void', ['pointer']);
 
-    export function svc_hook(
-        sysno: number,
-        before?: (...args: NativePointer[]) => void,
-        after?: (...args: NativePointer[]) => void,
+    export function registerCallback(
+        cb: NativeCallbackImplementation<void, [UInt64, NativePointer, NativePointer, NativePointer]>,
     ) {
-        const before_func =
-            (before &&
-                new NativeCallback(
-                    (...args: NativePointer[]) => {
-                        before(...args);
-                        return NULL;
-                    },
-                    'pointer',
-                    ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'],
-                )) ||
-            NULL;
-        const after_func =
-            (after &&
-                new NativeCallback(
-                    (...args: NativePointer[]) => {
-                        after(...args);
-                        return NULL;
-                    },
-                    'pointer',
-                    ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'],
-                )) ||
-            NULL;
-        // logger.info({ tag: 'svchook' }, `${_svc_hook(sysno, before_func, after_func)}`);
+        // this._registerCallback(new NativeCallback(cb, 'void', ['size_t', 'pointer', 'pointer', 'pointer']));
     }
 }
 
-export { memcmp, ProcMaps, SvcHook };
+// namespace SvcHook {
+//     const cm = new CModule('');
+//     //@ts-ignore
+//     const _svc_hook =
+//         //@ts-ignore
+//         cm === null ? new NativeFunction(cm.svc_hook as any, 'uint', ['uint', 'pointer', 'pointer']) : null;
+//
+//     export function svc_hook(
+//         sysno: number,
+//         before?: (...args: NativePointer[]) => void,
+//         after?: (...args: NativePointer[]) => void,
+//     ) {
+//         const before_func =
+//             (before &&
+//                 new NativeCallback(
+//                     (...args: NativePointer[]) => {
+//                         before(...args);
+//                         return NULL;
+//                     },
+//                     'pointer',
+//                     ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'],
+//                 )) ||
+//             NULL;
+//         const after_func =
+//             (after &&
+//                 new NativeCallback(
+//                     (...args: NativePointer[]) => {
+//                         after(...args);
+//                         return NULL;
+//                     },
+//                     'pointer',
+//                     ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'],
+//                 )) ||
+//             NULL;
+//         // logger.info({ tag: 'svchook' }, `${_svc_hook(sysno, before_func, after_func)}`);
+//     }
+// }
+
+export { memcmp, ProcMaps, Inject, fbase64, LinkerSym };

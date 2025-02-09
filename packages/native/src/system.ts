@@ -1,6 +1,6 @@
 import { Consts } from '@clockwork/common';
 import { Color, logger } from '@clockwork/logging';
-const { gray } = Color.use();
+const { gray, green, red } = Color.use();
 const { a_type } = Consts;
 
 function hookGetauxval() {
@@ -33,6 +33,7 @@ function hookSystem() {
         Libc.system,
         new NativeCallback(
             (command) => {
+                logger.info({ tag: 'system' }, `${command.readCString()}`);
                 const retval = Libc.system(command);
                 return retval;
             },
@@ -54,4 +55,32 @@ function hookPosixSpawn() {
     });
 }
 
-export { hookGetauxval, hookPosixSpawn, hookSystem };
+function hookPopen(fn?: (cmd: string) => string | void) {
+    fn ??= (cmd) => {
+        if (cmd.startsWith('uname')) return 'echo -a';
+        if (cmd.startsWith('getprop') && !cmd.startsWith('getprop ro.dalvik.vm.isa.arm')) return 'echo';
+    };
+    Interceptor.replace(
+        Libc.popen,
+        new NativeCallback(
+            (arg0, arg1) => {
+                const cmd = arg0.readCString();
+                const newCmd = fn?.(`${cmd}`);
+                if (newCmd) {
+                    arg0.writeUtf8String(newCmd);
+                    logger.info({ tag: 'popen' }, `${red(`${cmd}`)} -> ${green(newCmd)}`);
+                } else {
+                    logger.info({ tag: 'popen' }, `${cmd}`);
+                }
+
+                return Libc.popen(arg0, arg1);
+            },
+            'pointer',
+            ['pointer', 'pointer'],
+        ),
+    );
+}
+
+function hookExecv() {}
+
+export { hookPopen, hookGetauxval, hookPosixSpawn, hookSystem };

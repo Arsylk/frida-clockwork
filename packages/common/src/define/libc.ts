@@ -86,10 +86,15 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', 'readlinkat');
         return new NativeFunction(ptr, 'int', ['int', 'pointer', 'pointer', 'size_t']);
     },
-    // ssize_t read(int fd, void buf[.count], size_t count);
+    // ssize_t pread(int fd, void buf[.count], size_t count);
     read: () => {
         const ptr = Module.getExportByName('libc.so', 'read');
-        return new NativeFunction(ptr, 'uint', ['int', 'pointer', 'uint']);
+        return new NativeFunction(ptr, 'uint', ['int', 'pointer', 'size_t']);
+    },
+    // ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+    pread: () => {
+        const ptr = Module.getExportByName('libc.so', 'pread');
+        return new NativeFunction(ptr, 'uint', ['int', 'pointer', 'size_t', 'int']);
     },
     // off_t lseek(int fd, off_t offset, int whence);
     lseek: () => {
@@ -99,6 +104,16 @@ const LibcFinder = {
     // FILE *fopen(const char *restrict pathname, const char *restrict mode);
     fopen: () => {
         const ptr = Module.getExportByName('libc.so', 'fopen');
+        return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // FILE *fopen(const char *restrict pathname, const char *restrict mode);
+    open64: () => {
+        const ptr = Module.getExportByName(null, 'open64');
+        return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // FILE *fopen(const char *restrict pathname, const char *restrict mode);
+    fopen64: () => {
+        const ptr = Module.getExportByName(null, 'fopen64');
         return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
     },
     // FILE *fdopen(int fd, const char *mode);
@@ -228,6 +243,12 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', 'inet_aton');
         return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
     },
+    // int inet_addr(const char *cp, struct in_addr *addr);
+    inet_addr: () => {
+        const ptr = Module.getExportByName('libc.so', 'inet_addr');
+        return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+
     // pid_t fork(void);
     fork: () => {
         const ptr = Module.getExportByName('libc.so', 'fork');
@@ -262,6 +283,16 @@ const LibcFinder = {
     mmap: () => {
         const ptr = Module.getExportByName('libc.so', 'mmap');
         return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t', 'int', 'int', 'uint', 'long']);
+    },
+    // int munmap(void *addr, size_t length);
+    munmap: () => {
+        const ptr = Module.getExportByName('libc.so', 'munmap');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t']);
+    },
+    // void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ... /* void *new_address */);
+    mremap: () => {
+        const ptr = Module.getExportByName('libc.so', 'mremap');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t', 'size_t', 'int', 'pointer']);
     },
     // int mprotect(void *addr, size_t len, int prot);
     mprotect: () => {
@@ -476,7 +507,7 @@ const LibcFinder = {
     // int vsnprintf (char * s, size_t n, const char * format, va_list arg );
     vsnprintf: () => {
         const ptr = Module.getExportByName('libc.so', 'vsnprintf');
-        return new NativeFunction(ptr, 'int', ['pointer', 'int', 'pointer', '...']);
+        return new NativeFunction(ptr, 'int', ['pointer', 'int', 'pointer']);
     },
     // long int atol ( const char * str );
     atoi: () => {
@@ -487,6 +518,11 @@ const LibcFinder = {
     atol: () => {
         const ptr = Module.getExportByName('libc.so', 'atoi');
         return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+    // int isprint (int ch);
+    isprint: () => {
+        const ptr = Module.getExportByName('libc.so', 'isprint');
+        return new NativeFunction(ptr, 'int', ['int']);
     },
     // long int strtol (const char* str, char** endptr, int base);
     strtol: () => {
@@ -538,6 +574,11 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', 'memmove');
         return new NativeFunction(ptr, 'pointer', ['pointer', 'pointer', 'int']);
     },
+    // void * memset (void * __s, int __c, size_t __n);
+    memset: () => {
+        const ptr = Module.getExportByName('libc.so', 'memset');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'int', 'size_t']);
+    },
     // unsigned long getauxval(unsigned long type);
     getauxval: () => {
         const ptr = Module.getExportByName('libc.so', 'getauxval');
@@ -557,6 +598,15 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', 'syscall');
         return new NativeFunction(ptr, 'int32', ['int32', '...']);
     },
+    // may be stupid
+    syscall_openat: () => {
+        const ptr = Module.getExportByName('libc.so', 'syscall');
+        return new NativeFunction(ptr, 'int', ['int', 'int', 'pointer', 'char']);
+    },
+    syscall_read: () => {
+        const ptr = Module.getExportByName('libc.so', 'syscall');
+        return new NativeFunction(ptr, 'int', ['int', 'int', 'pointer', 'size_t']);
+    },
     // __sighandler_t signal(int __sig,__sighandler_t __handler);
     perror: () => {
         const ptr = Module.getExportByName('libc.so', 'perror');
@@ -572,6 +622,21 @@ const LibcFinder = {
         const ptr = Module.getExportByName('libc.so', 'nanosleep');
         return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
     },
+    // char *getenv(const char *name);
+    getenv: () => {
+        const ptr = Module.getExportByName('libc.so', 'getenv');
+        return new NativeFunction(ptr, 'pointer', ['pointer']);
+    },
+    // char *setenv(const char *name, char *value);
+    setenv: () => {
+        const ptr = Module.getExportByName('libc.so', 'setenv');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // int dl_iterate_phdr(typeof(int (struct dl_phdr_info *info, size_t size, void *data)) *callback, void *data);
+    dl_iterate_phdr: () => {
+        const ptr = Module.getExportByName('libc.so', 'dl_iterate_phdr');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
+    },
     // char * __cxa_demangle (const char *mangled_name, char *output_buffer, size_t *length, int *status)
     __cxa_demangle: () => {
         // const pt  = Module.getExportByName('libunwindstack.so', '__cxa_demangle');
@@ -583,12 +648,3 @@ const LibcFinder = {
 type LibcType = PropertyCallbackMapper<typeof LibcFinder>;
 const LibcFinderProxy: LibcType = proxyCallback(LibcFinder);
 export { LibcFinderProxy, type LibcType };
-`
-  #include <gum/guminterceptor.h>
-  #include <stdio.h>
-  #include <stdarg.h>
-
-  void init() {
-    printf("hi")
-  }
-`;

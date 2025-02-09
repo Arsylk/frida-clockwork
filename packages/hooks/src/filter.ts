@@ -115,12 +115,7 @@ const Filter = {
         if (trace.includes('at com.applovin.sdk.AppLovinInitProvider.onCreate')) return false;
         if (trace.includes('at com.google.firebase.provider.FirebaseInitProvider.onCreate')) return false;
         if (trace.includes('at com.google.firebase.crashlytics.CrashlyticsRegistrar')) return false;
-        if (
-            trace.includes('at com.facebook.appevents.internal.') &&
-            trace.includes('at android.icu.util.Currency.getAvailableCurrencyCodes')
-        )
-            return false;
-
+        if (trace.includes('at android.icu.util.Currency.getAvailableCurrencyCodes')) return false;
         // console.log(trace)
 
         return true;
