@@ -51,13 +51,13 @@ Interceptor.replace(
 Native.Pthread.hookPthread_create();
 Native.Files.hookFgets(predicate);
 
-//setImmediate(Java.performNow.bind(Java, () => Anticloak.Country.mock('VN')));
-//setImmediate(
-//    Java.perform.bind(Java, () => {
-//        logger.info({ tag: 'pid' }, `${Process.id}`);
-//        Classes.Thread.sleep(1_000);
-//    }),
-//);
+setImmediate(Java.performNow.bind(Java, () => Anticloak.Country.mock('BR')));
+setImmediate(
+    Java.perform.bind(Java, () => {
+        logger.info({ tag: 'pid' }, `${Process.id}`);
+        Classes.Thread.sleep(10_000);
+    }),
+);
 
 Native.TheEnd.hook(() => true);
 Native.Inject.onPrelinkOnce((module) => {
@@ -67,40 +67,20 @@ Native.Inject.onPrelinkOnce((module) => {
         Linker.patchSoList();
     }
     if (name === 'libjiagu_64.so' || name === 'libcovault-appsec.so' || name === 'libreveny.so') {
-        //Native.memWatch(sus, 8, (details) => {
-        //    logger.info({ tag: 'change' }, 'Text.stringify(details)');
-        //});
-
-        const addrs = [0x2250c, 0x7a824];
-        MemoryAccessMonitor.enable(
-            addrs.map((off) => ({ base: base.add(off), size: 8 })),
-            {
-                onAccess(details) {
-                    const { operation, from, rangeIndex } = details;
-                    i;
-                },
-            },
-        );
-        for (const off of addrs) {
-            const addr = base.add(off);
-            Memory.patchCode(addr, 8, () => {
-                const writer = new Arm64Writer(addr);
-                writer.putNop();
-                writer.flush();
-            });
-        }
-
         Native.Files.hookOpen(
             (r) => !ProcMaps.isFridaAddress(r),
             (path) => {
-                if (path?.endsWith('/build.prop')) return '/dev/null';
-                if (path?.endsWith('/maps')) return `${path}/nya`;
-                if (path?.endsWith('/status')) return `${path}/nya`;
-                if (path?.endsWith('/mounts')) return `${path}/nya`;
-                if (path?.endsWith('/mods')) return `${path}/nya`;
-                if (path?.endsWith('/comm')) return `${path}/nya`;
+                if (path?.endsWith('/build.prop')) return '/dev/nudddddddddddddddddll';
+                if (path?.endsWith('/maps')) return '/dev/nulssssl';
+                if (path?.endsWith('/status')) return '/dev/nulsssl';
+                if (path?.endsWith('/mounts')) return '/dev/nullsssssssssss';
+                if (path?.endsWith('/mods')) return '/dev/nullssd';
+                if (path?.endsWith('/comm')) return '/dev/nullssssssss';
 
-                //if (path?.includes('classes') && path?.includes('.dex')) hexdump(NULL);
+                if (path?.includes('.dex')) {
+                    logger.info({ tag: 'dclme' }, path);
+                    dumpLib(name);
+                }
             },
         );
 
@@ -124,7 +104,6 @@ Native.Inject.onPrelinkOnce((module) => {
             )
                 return '/dev/null';
         });
-        //Native.log(Libc.read, 'iip', { predicate: (ret) => !ProcMaps.isFridaAddress(ret) });
         hookException([160], {
             onBefore({ x0 }, num) {
                 switch (num) {
@@ -152,11 +131,32 @@ Native.Inject.onPrelinkOnce((module) => {
             },
         });
 
+        // Native.log(Libc.read, 'ipi', {
+        //     predicate: Native.isInRange.bind(null, module),
+        //     call([a0, a1, a2]) {
+        //         this.buf = a1;
+        //         const fd = Native.readFdPath(a0.toInt32());
+        //         logger.info({ tag: 'hooker' }, `${fd}`);
+        //     },
+        //     ret(ret) {
+        //         const buf = this.buf;
+        //         if (
+        //             buf.startsWith('/proc/') &&
+        //             (buf.includes('/maps') || buf.includes('/status') || buf.incldues('task'))
+        //         ) {
+        //             logger.info(
+        //                 { tag: 'hooker' },
+        //                 `${hexdump(this.buf, { header: false, length: ret.toInt32() })}`,
+        //             );
+        //         }
+        //     },
+        // });
         Native.Strings.hookStrstr(Native.isInRange.bind(module));
         Native.Strings.hookStrtok(Native.isInRange.bind(module));
         Native.Strings.hookStrcmp((r) => !ProcMaps.isFridaAddress(r));
         //Native.Files.hookReadlink((r) => !ProcMaps.isFridaAddress(r));
         Native.Files.hookAccess((r) => !ProcMaps.isFridaAddress(r));
+        Native.Files.hookStat((r) => !ProcMaps.isFridaAddress(r));
         Native.Files.hookRemove((r) => !ProcMaps.isFridaAddress(r));
 
         // let _arg: any = null;
@@ -198,8 +198,8 @@ Native.Inject.onPrelinkOnce((module) => {
         Native.replace(lib_signal, 'int', ['int', 'pointer'], function (signo, handler) {
             logger.info({ tag: 'signal' }, `signo: ${signo} ${Native.addressOf(this.returnAddress)}`);
             ProcMaps.printStacktrace(this.context);
-            dumpLib(name);
-            return 0;
+            // dumpLib(name);
+            return lib_signal(signo, handler);
         });
         //Native.log(
         //    Process.getModuleByName('libsigchain.so')
@@ -212,54 +212,81 @@ Native.Inject.onPrelinkOnce((module) => {
         //        },
         //    },
         //);
+        //
+        // Native.log(Libc.memcpy, 'ppi', {
+        //     nolog: true,
+        //     predicate: (ret) => !ProcMaps.isFridaAddress(ret),
+        //     call(args) {
+        //         const size = args[2].toInt32();
+        //         const a0 = hexdump(args[0], {
+        //             header: false,
+        //             ansi: true,
+        //             length: Math.min(size, 0xf * 6),
+        //         });
+        //         const a1 = hexdump(args[1], {
+        //             header: false,
+        //             ansi: true,
+        //             length: Math.min(size, 0xf * 6),
+        //         });
+        //         const addr = Native.addressOf(this.returnAddress);
+        //         logger.info({ tag: 'memcpy' }, `${this.returnAddress} ${addr}`);
+        //         logger.info({ tag: 'memcpy' }, `\n${a0}`);
+        //         logger.info({ tag: 'memcpy' }, `\n${a1}`);
+        //         logger.info(
+        //             { tag: 'memcpy' },
+        //             '==============================================================================',
+        //         );
+        //     },
+        // });
+        //
+        // Native.log(Libc.memcmp, 'ppi', {
+        //     nolog: true,
+        //     predicate: (ret) => !ProcMaps.isFridaAddress(ret),
+        //     call(args) {
+        //         const size = args[2].toInt32();
+        //         const a0 = hexdump(args[0], {
+        //             header: false,
+        //             ansi: true,
+        //             length: Math.min(size, 0xf * 6),
+        //         });
+        //         const a1 = hexdump(args[1], {
+        //             header: false,
+        //             ansi: true,
+        //             length: Math.min(size, 0xf * 6),
+        //         });
+        //         const addr = Native.addressOf(this.returnAddress);
+        //         if (addr.includes('0xc631c')) return;
+        //         logger.info({ tag: 'memcmp' }, `${this.returnAddress} ${addr}`);
+        //         logger.info({ tag: 'memcmp' }, `\n${a0}`);
+        //         logger.info({ tag: 'memcmp' }, `\n${a1}`);
+        //         logger.info(
+        //             { tag: 'memcmp' },
+        //             '==============================================================================',
+        //         );
+        //     },
+        // });
 
-        Native.log(Libc.memcmp, 'ppi', {
-            nolog: true,
-            predicate: (ret) => !ProcMaps.isFridaAddress(ret),
-            call(args) {
-                const size = args[2].toInt32();
-                const a0 = hexdump(args[0], {
-                    header: false,
-                    ansi: true,
-                    length: Math.min(size, 0xf * 6),
-                });
-                const a1 = hexdump(args[1], {
-                    header: false,
-                    ansi: true,
-                    length: Math.min(size, 0xf * 6),
-                });
-                const addr = Native.addressOf(this.returnAddress);
-                if (addr.includes('0xc631c')) return;
-                logger.info({ tag: 'memcmp' }, `${this.returnAddress} ${addr}`);
-                logger.info({ tag: 'memcmp' }, `\n${a0}`);
-                logger.info({ tag: 'memcmp' }, `\n${a1}`);
-                logger.info(
-                    { tag: 'memcmp' },
-                    '==============================================================================',
-                );
-            },
-        });
-        //Native.log(Libc.memmove, 'ppi', {
-        //    nolog: true,
-        //    predicate: (ret) =>
-        //        !ProcMaps.isFridaAddress(ret) && !`${Native.addressOf(ret)}`.includes('0xc631c'),
-        //    call(args) {
-        //        const size = args[2].toInt32();
-        //        const a1 = hexdump(args[1], {
-        //            header: false,
-        //            ansi: true,
-        //            length: Math.min(size, 0xf * 6),
-        //        });
-        //        const addr = Native.addressOf(this.returnAddress);
-        //        if (addr.includes('0xc631c') || (addr.includes('fread_unlocked') && addr.includes('0x9c')))
-        //            return;
-        //        logger.info({ tag: 'memmove' }, `${this.returnAddress} ${addr}`);
-        //        logger.info({ tag: 'memmove' }, `\n${a1}`);
-        //        logger.info(
-        //            { tag: 'memmove' },
-        //            '==============================================================================',
-        //        );
-        //    },
-        //});
+        // Native.log(Libc.memmove, 'ppi', {
+        //     nolog: true,
+        //     predicate: (ret) =>
+        //         !ProcMaps.isFridaAddress(ret) && !`${Native.addressOf(ret)}`.includes('0xc631c'),
+        //     call(args) {
+        //         const size = args[2].toInt32();
+        //         const a1 = hexdump(args[1], {
+        //             header: false,
+        //             ansi: true,
+        //             length: Math.min(size, 0xf * 6),
+        //         });
+        //         const addr = Native.addressOf(this.returnAddress);
+        //         if (addr.includes('0xc631c') || (addr.includes('fread_unlocked') && addr.includes('0x9c')))
+        //             return;
+        //         logger.info({ tag: 'memmove' }, `${this.returnAddress} ${addr}`);
+        //         logger.info({ tag: 'memmove' }, `\n${a1}`);
+        //         logger.info(
+        //             { tag: 'memmove' },
+        //             '==============================================================================',
+        //         );
+        //     },
+        // });
     }
 });

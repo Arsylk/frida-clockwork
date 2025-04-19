@@ -2,6 +2,7 @@ import * as Anticloak from '@clockwork/anticloak';
 import { Color, logger } from '@clockwork/logging';
 import * as Native from '@clockwork/native';
 import { Text, hookException, Linker } from '@clockwork/common';
+import { ProcMaps } from '@clockwork/cmodules';
 const { red, magentaBright: pink, gray, dim, green } = Color.use();
 
 const predicate: (ptr: NativePointer) => true | undefined = () => true;
@@ -12,8 +13,8 @@ Native.attachSystemPropertyGet(predicate, (key) => {
 });
 
 Native.Files.hookFopen(predicate, true, (path) => {
-    if (path?.endsWith('/su') || path?.endsWith('/mountinfo') || path?.endsWith('/maps')) {
-        return path.replace(/\/(su|mountinfo|maps)$/i, '/nya');
+    if (path?.endsWith('/su') || path?.endsWith('/mountinfo')) {
+        return path.replace(/\/(su|mountinfo)$/i, '/nya');
     }
     if (
         path?.includes('magisk') ||
@@ -58,7 +59,7 @@ Interceptor.replace(
     ),
 );
 
-Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path, type) => {
+Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path: NativePointer, type: NativePointer) => {
     const pathstr = path.readCString();
     let newpath: string | null = null;
     if (pathstr?.includes('getenforce')) {
@@ -71,10 +72,38 @@ Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path, type) => {
     return Libc.popen(path, type);
 });
 
-Native.Inject.onPrelinkOnce((module) => {
+Native.Inject.onPrelinkOnce((module: Module) => {
     const { base, name, size } = module;
-    if (name === 'libreveny.so' || name.includes('libjiagu')) {
-        Linker.patchSoList();
+    if (name === 'base.odex') {
+        Linker.patchSoList()
+    }
+    if (name === 'libreveny.so' || name === 'libhunter.so') {}
+        Native.Files.hookOpen(
+            (r) => !ProcMaps.isFridaAddress(r),
+            (path) => {
+                if (path?.endsWith('/build.prop')) return '/dev/null';
+                if (path?.endsWith('/maps')) return '/dev/null';
+                if (path?.endsWith('/status')) return '/dev/null';
+                if (path?.endsWith('/mounts')) return '/dev/null';
+                if (path?.endsWith('/mods')) return '/dev/null';
+                if (path?.endsWith('/comm')) return '/dev/null';
+
+                if (path?.includes('.dex')) {
+                    logger.info({ tag: 'dclme' }, path);
+                    // dumpLib(name);
+                }
+            },
+        );
+
+        Native.replace(Libc.dlopen, 'pointer', ['pointer', 'int'], (s0, i1) => {
+            const str = s0.readCString();
+            const list = Linker.getParsedList();
+            for (const { base, name } of list) {
+                if (str === name) {
+                    return base;
+                }
+            }
+        });
 
         hookException([160], {
             onBefore({ x0 }, num) {
@@ -103,6 +132,7 @@ Native.Inject.onPrelinkOnce((module) => {
             },
         });
 
+        Native.Files.hookDirent((x) => ProcMaps.isFridaAddress(x));
         Native.Files.hookOpendir(predicate, (path) => {
             if (
                 path?.startsWith('/proc') &&
@@ -114,4 +144,4 @@ Native.Inject.onPrelinkOnce((module) => {
                 return '/dev/null';
         });
     }
-});
+}

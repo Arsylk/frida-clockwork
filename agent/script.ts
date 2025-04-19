@@ -341,7 +341,7 @@ function hookJson(fn?: (key: string, method: string, fallback: () => Java.Wrappe
 }
 
 function hookPrefs(fn?: (this: FridaMethodThisCompat, key: string, method: string) => any) {
-    const keyFns = ['getBoolean', 'getFloat', 'getInt', 'getLong', 'getString', 'getStringSet'];
+    const keyFns = ['getBoolean', 'getFloat', /**'getInt',*/ 'getLong', 'getString', 'getStringSet'];
 
     hook(Classes.SharedPreferencesImpl, 'contains', {
         loggingPredicate: Filter.prefs,
@@ -351,10 +351,10 @@ function hookPrefs(fn?: (this: FridaMethodThisCompat, key: string, method: strin
             return found || this.fallback();
         }),
     });
-    hook(Classes.SharedPreferencesImpl, 'getAll', {
-        loggingPredicate: Filter.prefs,
-        logging: { multiline: false, short: true },
-    });
+    // hook(Classes.SharedPreferencesImpl, 'getAll', {
+    //     loggingPredicate: Filter.prefs,
+    //     logging: { multiline: false, short: true },
+    // });
 
     for (const item of keyFns) {
         hook(Classes.SharedPreferencesImpl, item, {
@@ -855,7 +855,7 @@ function stalk(pid: number, module: Module) {
 }
 
 Native.Strings.hookStrstr(() => true);
-Native.Files.hookFgets(predicate);
+Native.Files.hookFgets(() => true);
 
 Native.Inject.onPrelinkOnce(function (module) {
     const isNotFrida = (r: NativePointer) => !ProcMaps.isFridaAddress(r) && `${r}`.startsWith('0xab');
