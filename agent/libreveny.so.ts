@@ -2,6 +2,7 @@ import * as Anticloak from '@clockwork/anticloak';
 import { Color, logger } from '@clockwork/logging';
 import * as Native from '@clockwork/native';
 import { Text, hookException, Linker } from '@clockwork/common';
+import { ProcMaps } from '@clockwork/cmodules';
 const { red, magentaBright: pink, gray, dim, green } = Color.use();
 
 const predicate: (ptr: NativePointer) => true | undefined = () => true;
@@ -12,8 +13,8 @@ Native.attachSystemPropertyGet(predicate, (key) => {
 });
 
 Native.Files.hookFopen(predicate, true, (path) => {
-    if (path?.endsWith('/su') || path?.endsWith('/mountinfo') || path?.endsWith('/maps')) {
-        return path.replace(/\/(su|mountinfo|maps)$/i, '/nya');
+    if (path?.endsWith('/su') || path?.endsWith('/mountinfo')) {
+        return path.replace(/\/(su|mountinfo)$/i, '/nya');
     }
     if (
         path?.includes('magisk') ||
@@ -58,7 +59,7 @@ Interceptor.replace(
     ),
 );
 
-Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path, type) => {
+Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path: NativePointer, type: NativePointer) => {
     const pathstr = path.readCString();
     let newpath: string | null = null;
     if (pathstr?.includes('getenforce')) {
@@ -71,47 +72,76 @@ Native.replace(Libc.popen, 'pointer', ['pointer', 'pointer'], (path, type) => {
     return Libc.popen(path, type);
 });
 
-Native.Inject.onPrelinkOnce((module) => {
+Native.Inject.onPrelinkOnce((module: Module) => {
     const { base, name, size } = module;
-    if (name === 'libreveny.so' || name.includes('libjiagu')) {
+    if (name === 'base.odex') {
         Linker.patchSoList();
+    }
+    if (name === 'libreveny.so' || name === 'libhunter.so') {
+    }
+    Native.Files.hookOpen(
+        (r) => !ProcMaps.isFridaAddress(r),
+        (path) => {
+            if (path?.endsWith('/build.prop')) return '/dev/null';
+            if (path?.endsWith('/maps')) return '/dev/null';
+            if (path?.endsWith('/status')) return '/dev/null';
+            if (path?.endsWith('/mounts')) return '/dev/null';
+            if (path?.endsWith('/mods')) return '/dev/null';
+            if (path?.endsWith('/comm')) return '/dev/null';
 
-        hookException([160], {
-            onBefore({ x0 }, num) {
-                switch (num) {
-                    case 160:
-                        this._x0 = x0;
-                        break;
-                }
-            },
-            onAfter(_, num) {
-                switch (num) {
-                    case 160:
-                        {
-                            const addr = this._x0.add(0x41 * 2);
-                            const text = addr.readCString().toLowerCase();
+            if (path?.includes('.dex')) {
+                logger.info({ tag: 'dclme' }, path);
+                // dumpLib(name);
+            }
+        },
+    );
 
-                            for (const key of ['ksu', 'kernelsu', 'lineage', 'dirty']) {
-                                const i = text.indexOf(key);
-                                if (i !== -1) {
-                                    addr.add(i).writeByteArray(new Array(key.length).fill(0x0));
-                                }
+    Native.replace(Libc.dlopen, 'pointer', ['pointer', 'int'], (s0, i1) => {
+        const str = s0.readCString();
+        const list = Linker.getParsedList();
+        for (const { base, name } of list) {
+            if (str === name) {
+                return base;
+            }
+        }
+    });
+
+    hookException([160], {
+        onBefore({ x0 }, num) {
+            switch (num) {
+                case 160:
+                    this._x0 = x0;
+                    break;
+            }
+        },
+        onAfter(_, num) {
+            switch (num) {
+                case 160:
+                    {
+                        const addr = this._x0.add(0x41 * 2);
+                        const text = addr.readCString().toLowerCase();
+
+                        for (const key of ['ksu', 'kernelsu', 'lineage', 'dirty']) {
+                            const i = text.indexOf(key);
+                            if (i !== -1) {
+                                addr.add(i).writeByteArray(new Array(key.length).fill(0x0));
                             }
                         }
-                        break;
-                }
-            },
-        });
+                    }
+                    break;
+            }
+        },
+    });
 
-        Native.Files.hookOpendir(predicate, (path) => {
-            if (
-                path?.startsWith('/proc') &&
-                (path?.includes('/task') ||
-                    path.endsWith('/fd') ||
-                    path.endsWith('/status') ||
-                    path.endsWith('/fs/jbd2'))
-            )
-                return '/dev/null';
-        });
-    }
+    Native.Files.hookDirent((x) => ProcMaps.isFridaAddress(x));
+    Native.Files.hookOpendir(predicate, (path) => {
+        if (
+            path?.startsWith('/proc') &&
+            (path?.includes('/task') ||
+                path.endsWith('/fd') ||
+                path.endsWith('/status') ||
+                path.endsWith('/fs/jbd2'))
+        )
+            return '/dev/null';
+    });
 });

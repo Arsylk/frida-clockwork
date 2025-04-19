@@ -493,7 +493,7 @@ function hookReadlink(predicate: (ptr: NativePointer) => boolean) {
 }
 
 function hookFgets(predicate: (ptr: NativePointer) => boolean, fn?: (line: string) => string | undefined) {
-    const array: ('fgets' | 'fgets_unlocked')[] = ['fgets_unlocked'];
+    const array: ('fgets' | 'fgets_unlocked')[] = ['fgets', 'fgets_unlocked'];
     for (const key of array) {
         const func = Libc[key];
         function callback(buffer: NativePointer, size: number, fp: NativePointer) {

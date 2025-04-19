@@ -478,6 +478,7 @@ const CM_find_so_info = new NativeFunction(cm.find_so_info, 'pointer', ['pointer
 
 let sysThread = NULL;
 type SyscallParams = {
+    logging?: true;
     onBefore?: (context: Arm64CpuContext, num: number) => void;
     onAfter?: (context: Arm64CpuContext, num: number) => void;
 };
@@ -500,7 +501,7 @@ function hookException(nums: number[], params: SyscallParams) {
                 args[i] = Reflect.get(details.context, `x${i}`);
                 rawargs.add((i + 1) * Process.pointerSize).writePointer(args[i]);
             }
-            logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
+            params.logging && logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
 
             params.onBefore?.(details.context as Arm64CpuContext, num);
             const retval = CM_enqueue_task(sysThread, rawargs, 0);

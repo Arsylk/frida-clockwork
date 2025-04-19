@@ -15,5 +15,5 @@
         "noImplicitThis": false,
         "allowArbitraryExtensions": true,
         "composite": true
-    }
+    },
 }

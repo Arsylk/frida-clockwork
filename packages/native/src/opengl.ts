@@ -9,7 +9,7 @@ const GL_ENUM = {
 };
 
 function hookGlGetString() {
-    Interceptor.attach(Module.getExportByName(null, 'glGetString'), {
+    Interceptor.attach(Module.getGlobalExportByName('glGetString'), {
         onEnter(args: any) {
             this.name = args[0];
         },

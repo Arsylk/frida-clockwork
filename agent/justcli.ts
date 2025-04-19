@@ -1,13 +1,14 @@
-import * as Unity from '@clockwork/unity';
-import { emitter } from '@clockwork/common';
-import { dumpLib, hookArtLoader, initSoDump, initDexDump } from '@clockwork/dump';
-import { hook } from '@clockwork/hooks';
-import { getSelfFiles } from '@clockwork/native';
 import { InstallReferrer } from '@clockwork/anticloak';
+import { emitter } from '@clockwork/common';
+import { dumpLib, hookArtLoader, initDexDump, initSoDump } from '@clockwork/dump';
+import { hook } from '@clockwork/hooks';
+import { getSelfFiles, Logcat } from '@clockwork/native';
+import * as Unity from '@clockwork/unity';
 
 //Unity.patchSsl();
 //Unity.attachStrings();
-InstallReferrer.replace();
+Logcat.hookLogcat();
+initSoDump();
 
 emitter.on('dexart', () => hookArtLoader());
 emitter.on('dexdump', () => initDexDump());

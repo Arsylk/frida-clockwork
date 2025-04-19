@@ -2,6 +2,9 @@
     "compilerOptions": {
         "lib": [
             "ESNext"
-        ]
-    }
+        ],
+    },
+    "include": [
+        "../frida-gum.ts"
+    ]
 }

@@ -3,9 +3,9 @@ import { Inject } from './inject.js';
 
 function hookLogcat(fn?: (this: InvocationContext, msg: string) => void) {
     const liblog = Process.getModuleByName('liblog.so');
-    //const _isLoggable = Module.getExportByName(null, '__android_log_is_loggable');
+    //const _isLoggable = Module.getGlobalExportByName('__android_log_is_loggable');
     //Interceptor.replaceFast(_isLoggable, new NativeCallback(() => 1, 'bool', ['int', 'pointer', 'int']));
-    const _logPrint = Module.getExportByName(null, '__android_log_print');
+    const _logPrint = Module.getGlobalExportByName('__android_log_print');
     Interceptor.attach(_logPrint, {
         onEnter: function (args) {
             this.resultPtr = this.context.sp.sub(1112);
@@ -17,7 +17,7 @@ function hookLogcat(fn?: (this: InvocationContext, msg: string) => void) {
             logger.info({ tag: 'logcat' }, `${this.resultPtr.readCString()}`);
         },
     });
-    const vsnprintf = Module.getExportByName(null, 'vsnprintf');
+    const vsnprintf = Module.getGlobalExportByName('vsnprintf');
     Inject.attachInModule('liblog.so', vsnprintf, {
         onEnter: function (args) {
             this.result = args[0];

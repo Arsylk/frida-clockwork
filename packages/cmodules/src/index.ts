@@ -59,9 +59,9 @@ const memcmp = new CModule(fbase64(_memcmp), {
 namespace ProcMaps {
     export const cm = new CModule(fbase64(_procmaps), {
         frida_log: get_frida_log('procmaps'),
-        perror: Module.getExportByName(null, 'perror'),
-        _Unwind_Backtrace: Module.getExportByName(null, '_Unwind_Backtrace'),
-        _Unwind_GetIP: Module.getExportByName(null, '_Unwind_GetIP'),
+        perror: Module.getGlobalExportByName('perror'),
+        _Unwind_Backtrace: Module.getGlobalExportByName('_Unwind_Backtrace'),
+        _Unwind_GetIP: Module.getGlobalExportByName('_Unwind_GetIP'),
         dl_soinfo_get_soname: LinkerSym.__dl__ZNK6soinfo10get_sonameEv,
         dl_solist_get_head: LinkerSym.__dl__Z15solist_get_headv,
         close: Libc.close,

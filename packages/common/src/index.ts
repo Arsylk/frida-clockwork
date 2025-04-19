@@ -69,7 +69,7 @@ declare global {
     // biome-ignore lint/suspicious/noRedeclare: Makes the function accessible from global frida context
     function findClass(className: string, ...loaders: Java.Wrapper[]): Java.Wrapper | null;
 }
-Object.defineProperties(global, {
+Object.defineProperties(globalThis, {
     Linker: {
         value: Linker,
         writable: false,

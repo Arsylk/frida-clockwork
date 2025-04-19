@@ -153,7 +153,7 @@ function tryDemangle<T extends string | null>(name: T): T {
     return name;
 }
 
-const sscanf = new NativeFunction(Module.getExportByName('libc.so', 'sscanf'), 'int', [
+const sscanf = new NativeFunction(Module.getGlobalExportByName('sscanf'), 'int', [
     'pointer',
     'pointer',
     'pointer',

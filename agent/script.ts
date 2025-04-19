@@ -341,7 +341,7 @@ function hookJson(fn?: (key: string, method: string, fallback: () => Java.Wrappe
 }
 
 function hookPrefs(fn?: (this: FridaMethodThisCompat, key: string, method: string) => any) {
-    const keyFns = ['getBoolean', 'getFloat', 'getInt', 'getLong', 'getString', 'getStringSet'];
+    const keyFns = ['getBoolean', 'getFloat', /**'getInt',*/ 'getLong', 'getString', 'getStringSet'];
 
     hook(Classes.SharedPreferencesImpl, 'contains', {
         loggingPredicate: Filter.prefs,
@@ -351,10 +351,10 @@ function hookPrefs(fn?: (this: FridaMethodThisCompat, key: string, method: strin
             return found || this.fallback();
         }),
     });
-    hook(Classes.SharedPreferencesImpl, 'getAll', {
-        loggingPredicate: Filter.prefs,
-        logging: { multiline: false, short: true },
-    });
+    // hook(Classes.SharedPreferencesImpl, 'getAll', {
+    //     loggingPredicate: Filter.prefs,
+    //     logging: { multiline: false, short: true },
+    // });
 
     for (const item of keyFns) {
         hook(Classes.SharedPreferencesImpl, item, {
@@ -546,55 +546,55 @@ Java.performNow(() => {
     hookWebview(true);
     hookNetwork();
     hookFile();
-    hookJson((key, _method, fallback) => {
-        switch (key) {
-            //case 'r_debugger':
-            //    return true;
-            case 'referrer':
-            case 'applink_url':
-            case 'af_message':
-            case 'af_status':
-            case 'tracker_name':
-            case 'network':
-            case 'campaign':
-            case 'google_utm_source':
-                return INSTALL_REFERRER;
-            case 'gaid':
-            case 'android_imei':
-            case 'android_meid':
-            case 'android_device_id':
-                return '4102978102398';
-        }
-    });
-    hookPrefs((key, method) => {
-        switch (key) {
-            case 'oskdoskdue':
-                return 0;
-            case 'isAudit':
-            case 'IS_AUDIT':
-                return false;
-            case 'invld_id':
-            case 'key_umeng_sp_oaid':
-            case 'UTDID2':
-            case 'adid':
-            case 'com.flurry.sdk.advertising_id':
-            case 'tenjin_advertising_id':
-            case 'uuid':
-            case 'AF_CAMPAIGN':
-                return 'Non-organic';
-            case 'country':
-            case 'userCountry':
-            case 'key_real_country':
-            case 'KEY_LOCALE':
-            case 'key_country':
-            case 'Plat_Lang':
-                return 'VN';
-            case 'install_referrer':
-                return INSTALL_REFERRER;
-            case '_rs_app_start_route':
-                return 'Login';
-        }
-    });
+    // hookJson((key, _method, fallback) => {
+    //     switch (key) {
+    //         //case 'r_debugger':
+    //         //    return true;
+    //         case 'referrer':
+    //         case 'applink_url':
+    //         case 'af_message':
+    //         case 'af_status':
+    //         case 'tracker_name':
+    //         case 'network':
+    //         case 'campaign':
+    //         case 'google_utm_source':
+    //             return INSTALL_REFERRER;
+    //         case 'gaid':
+    //         case 'android_imei':
+    //         case 'android_meid':
+    //         case 'android_device_id':
+    //             return '4102978102398';
+    //     }
+    // });
+    // hookPrefs((key, method) => {
+    //     switch (key) {
+    //         case 'oskdoskdue':
+    //             return 0;
+    //         case 'isAudit':
+    //         case 'IS_AUDIT':
+    //             return false;
+    //         case 'invld_id':
+    //         case 'key_umeng_sp_oaid':
+    //         case 'UTDID2':
+    //         case 'adid':
+    //         case 'com.flurry.sdk.advertising_id':
+    //         case 'tenjin_advertising_id':
+    //         case 'uuid':
+    //         case 'AF_CAMPAIGN':
+    //             return 'Non-organic';
+    //         case 'country':
+    //         case 'userCountry':
+    //         case 'key_real_country':
+    //         case 'KEY_LOCALE':
+    //         case 'key_country':
+    //         case 'Plat_Lang':
+    //             return 'VN';
+    //         case 'install_referrer':
+    //             return INSTALL_REFERRER;
+    //         case '_rs_app_start_route':
+    //             return 'Login';
+    //     }
+    // });
     hook(Classes.SharedPreferencesImpl$EditorImpl, 'putString');
     hookPreferences(() => {});
     hookFirestore();
@@ -635,7 +635,7 @@ Java.performNow(() => {
     Anticloak.hookSettings();
     Anticloak.hookAdId(AD_ID);
     Anticloak.hookPackageManager();
-    Anticloak.Country.mock('VN');
+    // Anticloak.Country.mock('VN');
     Anticloak.InstallReferrer.replace({ install_referrer: INSTALL_REFERRER });
 
     hook(Classes.SystemProperties, 'get', {
@@ -855,7 +855,7 @@ function stalk(pid: number, module: Module) {
 }
 
 Native.Strings.hookStrstr(() => true);
-Native.Files.hookFgets(predicate);
+Native.Files.hookFgets(() => true);
 
 Native.Inject.onPrelinkOnce(function (module) {
     const isNotFrida = (r: NativePointer) => !ProcMaps.isFridaAddress(r) && `${r}`.startsWith('0xab');
@@ -904,8 +904,8 @@ Native.Inject.onPrelinkOnce(function (module) {
         //Native.Strings.hookStrchr(predicate);
         //Native.Strings.hookStrcat(predicate);
 
-        Native.log(Module.getExportByName(null, 'android_set_abort_message'), 's');
-        //Native.log(Libc.mmap, 'piiiip', {});
+        Native.log(Module.getGlobalExportByName('android_set_abort_message'), 's');
+        Native.log(Libc.mmap, 'piiiip', {});
         Native.log(Libc.memcpy, '__i', {
             predicate: (ptr) => predicate(ptr),
             call: function (args) {
@@ -975,81 +975,3 @@ function syscallRead(path: string): string | null {
 
     return text;
 }
-
-//setTimeout(() => {
-//    const dir = '/data/data/com.reveny.nativecheck/files';
-//    Libc.system(Memory.allocUtf8String(`mkdir -p ${dir}`));
-//
-//    // @ts-ignore
-//    File.writeAllText(`${dir}/fake_maps`, File.readAllText('/proc/self/maps'));
-//});
-
-Object.defineProperty(global, 'keysJs', {
-    value: (str: string) => {
-        findClass('d.try')?.type(`
-            var tryNull = (x) => {
-                var r = null;
-                try {
-                    r = x();
-                } catch (e) {}
-                return r;
-            };
-            var __iterAs = (a) => {
-                var keys = null;
-                try {
-                    keys = Object.keys(a);
-                } catch(e) {
-                }
-                return keys !== null ? keys : null;
-            };
-            var sss = ${str};
-            __iterAs(sss)?.forEach(x => {
-                tryNull(() => {console.log(x)});
-            });`);
-    },
-});
-Object.defineProperty(global, 'evalJs', {
-    value: (str: string) => {
-        findClass('d.try')?.type(`
-            var __this;
-            __this = this;
-            var __iterAs = null;
-            __iterAs = (a) => {
-                var keys = null;
-                try {
-                    keys = Object.keys(a);
-                } catch(e) {
-                }
-                return keys !== null ? keys : null;
-            };
-            var ej = null;
-            ej = (sss, depth) => {
-                sss = sss?.toString();
-                var pp = ' '.repeat(depth * 2);
-                var refget = (x, y) => {
-                    var z = null;
-                    try {
-                        z = Reflect.get(x, y);
-                    } catch (e) {}
-                    return z;
-                };
-                var be = sss?.split('.')?.reduce?.((p, c) => (p === null) ? refget(__this, c) : refget(p, c), null);
-                var lm = JSON.stringify({ arg0: sss, type: typeof be, value: new String(be) });
-                console.log(lm);
-                __iterAs(be)?.forEach((key) => {
-                    var fk = [sss, key].join('.');
-                    if ((key === 'window' || key === 'parent' || key === 'top') && fk.startsWith('window')) return;
-                    if (depth > 4) return;
-                    ej(fk, depth+1);
-                });
-            };
-            ej('${str}', 0);`);
-    },
-});
-Object.defineProperty(global, 'setJs', {
-    value: (str: string, key: string, val: any) => {
-        findClass('d.try')?.type(
-            `var ejv; ejv = (sss, kkk, vvv) => { var pr = sss?.toString(); var be = pr.split('.').reduce((p, c) => Reflect.get(p !== null ? p : this, c), null); console.log(pr, be, Reflect.get(be, kkk)); console.log(be[kkk] = val); }; ejv('${str}', '${key}', ${val});`,
-        );
-    },
-});

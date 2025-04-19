@@ -97,7 +97,8 @@ namespace Inject {
                 const _init = x2_load_bias.add(_init_offset);
 
                 // this is some black magic stuff
-                const _module = Process.getModuleByAddress(_init);
+                const _module = Process.findModuleByAddress(_init);
+                if (!_module) return;
 
                 // no idea why this suddenly seems to be neccessary ???
                 const obj = Object.defineProperties(
@@ -132,7 +133,7 @@ namespace Inject {
         });
 
     // TODO add just hook dlopen_ext
-    // const android_dlopen_ext = Module.getExportByName(null, 'android_dlopen_ext');
+    // const android_dlopen_ext = Module.getGlobalExportByName('android_dlopen_ext');
     do_dlopen &&
         Interceptor.attach(do_dlopen, {
             onEnter: function (args) {
@@ -152,6 +153,10 @@ namespace Inject {
                 modules.update();
                 const libName = this.libName;
                 if (libName) onAfterInitArray(libName, this);
+                if (this && libName) {
+                    const module = Process.findModuleByName(libName);
+                    module && doOnPrelink.call(this, module);
+                }
             },
         });
 
@@ -195,7 +200,7 @@ namespace Inject {
     }
 
     export function onPrelinkOnce(fn: (this: InvocationContext, module: Module) => void) {
-        prelinkCallbacks.push(fn);
+        prelinkOnceCallbacks.push(fn);
     }
 
     export function afterInitArray(fn: (this: InvocationContext, name: string) => void) {
