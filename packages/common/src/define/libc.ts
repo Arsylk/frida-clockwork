@@ -24,14 +24,14 @@ const LibcFinder = {
     // int openat(int dirfd, const char *pathname, int flags);
     openat: () => {
         const ptr = Module.getGlobalExportByName('openat');
-        return new NativeFunction(ptr, 'int', ['int', 'pointer', 'int', '...']);
+        return new NativeFunction(ptr, 'int', ['int', 'pointer', 'int']);
     },
     // int close(int fd);
     close: () => {
         const ptr = Module.getGlobalExportByName('close');
         return new NativeFunction(ptr, 'int', ['int']);
     },
-    // int close(int fd);
+    // int fclose(FILE *file);
     fclose: () => {
         const ptr = Module.getGlobalExportByName('fclose');
         return new NativeFunction(ptr, 'int', ['pointer']);
@@ -86,10 +86,15 @@ const LibcFinder = {
         const ptr = Module.getGlobalExportByName('readlinkat');
         return new NativeFunction(ptr, 'int', ['int', 'pointer', 'pointer', 'size_t']);
     },
-    // ssize_t read(int fd, void buf[.count], size_t count);
+    // ssize_t pread(int fd, void buf[.count], size_t count);
     read: () => {
         const ptr = Module.getGlobalExportByName('read');
         return new NativeFunction(ptr, 'uint', ['int', 'pointer', 'uint']);
+    },
+    // ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+    pread: () => {
+        const ptr = Module.getGlobalExportByName('pread');
+        return new NativeFunction(ptr, 'uint', ['int', 'pointer', 'size_t', 'int']);
     },
     // off_t lseek(int fd, off_t offset, int whence);
     lseek: () => {
@@ -99,6 +104,16 @@ const LibcFinder = {
     // FILE *fopen(const char *restrict pathname, const char *restrict mode);
     fopen: () => {
         const ptr = Module.getGlobalExportByName('fopen');
+        return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // FILE *fopen(const char *restrict pathname, const char *restrict mode);
+    open64: () => {
+        const ptr = Module.getGlobalExportByName('open64');
+        return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // FILE *fopen(const char *restrict pathname, const char *restrict mode);
+    fopen64: () => {
+        const ptr = Module.getGlobalExportByName('fopen64');
         return new SystemFunction(ptr, 'pointer', ['pointer', 'pointer']);
     },
     // FILE *fdopen(int fd, const char *mode);
@@ -228,6 +243,12 @@ const LibcFinder = {
         const ptr = Module.getGlobalExportByName('inet_aton');
         return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
     },
+    // int inet_addr(const char *cp, struct in_addr *addr);
+    inet_addr: () => {
+        const ptr = Module.getGlobalExportByName('inet_addr');
+        return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+
     // pid_t fork(void);
     fork: () => {
         const ptr = Module.getGlobalExportByName('fork');
@@ -262,6 +283,16 @@ const LibcFinder = {
     mmap: () => {
         const ptr = Module.getGlobalExportByName('mmap');
         return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t', 'int', 'int', 'uint', 'long']);
+    },
+    // int munmap(void *addr, size_t length);
+    munmap: () => {
+        const ptr = Module.getGlobalExportByName('munmap');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t']);
+    },
+    // void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ... /* void *new_address */);
+    mremap: () => {
+        const ptr = Module.getGlobalExportByName('mremap');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'size_t', 'size_t', 'int', 'pointer']);
     },
     // int mprotect(void *addr, size_t len, int prot);
     mprotect: () => {
@@ -476,7 +507,7 @@ const LibcFinder = {
     // int vsnprintf (char * s, size_t n, const char * format, va_list arg );
     vsnprintf: () => {
         const ptr = Module.getGlobalExportByName('vsnprintf');
-        return new NativeFunction(ptr, 'int', ['pointer', 'int', 'pointer', '...']);
+        return new NativeFunction(ptr, 'int', ['pointer', 'int', 'pointer']);
     },
     // long int atol ( const char * str );
     atoi: () => {
@@ -487,6 +518,11 @@ const LibcFinder = {
     atol: () => {
         const ptr = Module.getGlobalExportByName('atoi');
         return new NativeFunction(ptr, 'int', ['pointer']);
+    },
+    // int isprint (int ch);
+    isprint: () => {
+        const ptr = Module.getGlobalExportByName('isprint');
+        return new NativeFunction(ptr, 'int', ['int']);
     },
     // long int strtol (const char* str, char** endptr, int base);
     strtol: () => {
@@ -538,6 +574,11 @@ const LibcFinder = {
         const ptr = Module.getGlobalExportByName('memmove');
         return new NativeFunction(ptr, 'pointer', ['pointer', 'pointer', 'int']);
     },
+    // void * memset (void * __s, int __c, size_t __n);
+    memset: () => {
+        const ptr = Module.getGlobalExportByName('memset');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'int', 'size_t']);
+    },
     // unsigned long getauxval(unsigned long type);
     getauxval: () => {
         const ptr = Module.getGlobalExportByName('getauxval');
@@ -557,6 +598,15 @@ const LibcFinder = {
         const ptr = Module.getGlobalExportByName('syscall');
         return new NativeFunction(ptr, 'int32', ['int32', '...']);
     },
+    // may be stupid
+    syscall_openat: () => {
+        const ptr = Module.getGlobalExportByName('syscall');
+        return new NativeFunction(ptr, 'int', ['int', 'int', 'pointer', 'char']);
+    },
+    syscall_read: () => {
+        const ptr = Module.getGlobalExportByName('syscall');
+        return new NativeFunction(ptr, 'int', ['int', 'int', 'pointer', 'size_t']);
+    },
     // __sighandler_t signal(int __sig,__sighandler_t __handler);
     perror: () => {
         const ptr = Module.getGlobalExportByName('perror');
@@ -570,6 +620,21 @@ const LibcFinder = {
     // int nanosleep(const struct timespec *duration, timespec *_Nullable rem);
     nanosleep: () => {
         const ptr = Module.getGlobalExportByName('nanosleep');
+        return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
+    },
+    // char *getenv(const char *name);
+    getenv: () => {
+        const ptr = Module.getGlobalExportByName('getenv');
+        return new NativeFunction(ptr, 'pointer', ['pointer']);
+    },
+    // char *setenv(const char *name, char *value);
+    setenv: () => {
+        const ptr = Module.getGlobalExportByName('setenv');
+        return new NativeFunction(ptr, 'pointer', ['pointer', 'pointer']);
+    },
+    // int dl_iterate_phdr(typeof(int (struct dl_phdr_info *info, size_t size, void *data)) *callback, void *data);
+    dl_iterate_phdr: () => {
+        const ptr = Module.getGlobalExportByName('dl_iterate_phdr');
         return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
     },
     // char * __cxa_demangle (const char *mangled_name, char *output_buffer, size_t *length, int *status)

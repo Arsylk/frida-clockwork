@@ -28,6 +28,8 @@ function hookPtrace() {
 
 function hookVMDebug() {
     hook(Classes.VMDebug, 'isDebuggerConnected', { replace: always(false) });
+    hook(Classes.VMDebug, 'isDebuggingEnabled', { replace: always(false) });
+    hook(Classes.VMDebug, 'lastDebuggerActivity', { replace: always(-1) });
 }
 
 function hookDigestEquals() {

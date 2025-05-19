@@ -52,7 +52,7 @@ const string: (string: any) => string = (string: any) => {
 };
 
 const char: (char: any) => string = (char: any) => {
-    return yellow(`'${string}'`);
+    return yellow(`'${`${char}`.replace('\n', '\\\n').replace('\r', '\\\r')}'`);
 };
 
 const number: (number: any) => string = (number: any) => {

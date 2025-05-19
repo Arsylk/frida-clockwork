@@ -1,9 +1,12 @@
 import { Libc, isNully } from '@clockwork/common';
 import { subLogger, Color } from '@clockwork/logging';
+import { addressOf } from './utils.js';
 const { gray, green, red } = Color.use();
 const logger = subLogger('sysprop');
 
 const spammyKeys = [
+    'debug.atrace.app_number',
+    'debug.atrace.tags.enableflags',
     'debug.stagefright.ccodec_timeout_mult',
     'vendor.debug.egl.swapinterval',
     'ro.build.version.sdk',
@@ -73,19 +76,28 @@ function attachSystemPropertyGet(
                 }
 
                 if (result && value) {
-                    logger.info({ tag: 'sysfind' }, `${gray(key)}: ${red(value)} -> ${green(result)}`);
+                    logger.info(
+                        { tag: 'sysfind' },
+                        `${gray(key)}: ${red(value)} -> ${green(result)} ${addressOf(this.returnAddress)}`,
+                    );
                     return;
                 }
                 if (result === null && value) {
-                    logger.info({ tag: 'sysfind' }, `${gray(key)}: ${red(value)}`);
+                    logger.info(
+                        { tag: 'sysfind' },
+                        `${gray(key)}: ${red(value)} ${addressOf(this.returnAddress)}`,
+                    );
                 }
                 if (value === null) {
                     const sub = value !== null ? `${red(value)} -> ` : ' ';
-                    logger.info({ tag: 'sysfind' }, `${gray(key)}: ${sub}${Color.number(result)}`);
+                    logger.info(
+                        { tag: 'sysfind' },
+                        `${gray(key)}: ${sub}${Color.number(result)} ${addressOf(this.returnAddress)}`,
+                    );
                     return;
                 }
 
-                logger.info({ tag: 'sysfind' }, `${gray(key)}: ${value}`);
+                logger.info({ tag: 'sysfind' }, `${gray(key)}: ${value} ${addressOf(this.returnAddress)}`);
             },
         });
 }

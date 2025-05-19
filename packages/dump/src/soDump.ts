@@ -25,6 +25,7 @@ function dropSoFixer(rawtext: string, fileName: string) {
     const filesDir = `/data/data/${procName}`;
     const fullPath = `${filesDir}/${fileName}`;
     const sodata = lz.decompress(rawtext, {inputEncoding: 'Base64', outputEncoding: 'ByteArray' })
+    //@ts-ignore
     File.writeAllBytes(fullPath, sodata);
     return fullPath;
 }
@@ -39,6 +40,7 @@ function filterSo({ name, path }: { name: string; path: string }): boolean {
 }
 
 function dumpLibInternal(name: string) {
+    console.log('nya?')
     const libso = Process.findModuleByName(name);
     if (libso == null) {
         logger.error({ tag: 'dumplib' }, `Module ${name} not found`);
@@ -112,6 +114,7 @@ function dumpLibInternal(name: string) {
 function dumpSoFile(ptr: NativePointer, size: number, file: string) {
     const procName = getSelfProcessName();
     const dumpsDir = `/data/data/${procName}/dumps`;
+    Libc.mkdir(Memory.allocUtf8String(dumpsDir), 0o755);
     const outPath = `${dumpsDir}/${file}`;
     Memory.protect(ptr, size, 'rwx');
     const buffer = ptr.readByteArray(size);

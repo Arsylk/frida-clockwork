@@ -1,7 +1,8 @@
-import { Classes, ClassesString, Text, isNully, vs } from '@clockwork/common';
+import { Classes, ClassesString, Text, isNully, tryNull, vs, emitter } from '@clockwork/common';
 import { Consts } from '@clockwork/common';
 import { Color, logger as gLogger, subLogger } from '@clockwork/logging';
-import { addressOf } from '@clockwork/native';
+import { addressOf, previousReturn } from '@clockwork/native';
+import { fbase64, ProcMaps } from '@clockwork/cmodules';
 import {
     EnvWrapper,
     type JniDefinition,
@@ -17,19 +18,6 @@ import { resolveMethod, signatureToPrettyTypes } from './tracer.js';
 const logger = subLogger('jnitrace');
 const { black, gray, dim, redBright, magenta, orange, lavender } = Color.use();
 const { JavaPrimitive } = Consts;
-
-function previousReturn(ctx: Arm64CpuContext): NativePointer {
-    const addr1 = ctx.lr;
-    try {
-        const fp = ctx.fp;
-        if (fp) {
-            const addr2 = fp.add(8).readPointer();
-            return addr2 ?? NULL;
-        }
-    } catch (e) {}
-
-    return NULL;
-}
 
 function ColorMethod(jMethodId: NativePointer, method: JavaMethod): string {
     let sb = '';
@@ -58,6 +46,9 @@ function ColorMethodInvoke(method: JavaMethod, args: string[]): string {
     }
 
     switch (method.className) {
+        case 'android.view.MotionEvent':
+            isMultiline = method.name in ['getHistoricalAxisValue', 'getAxisValue'];
+            break;
         case 'com.android.internal.policy.PhoneWindow':
             isMultiline = method.name in ['setStatusBarColor'];
             break;
@@ -72,6 +63,24 @@ function ColorMethodInvoke(method: JavaMethod, args: string[]): string {
             break;
         case 'org.cocos2dx.lib.Cocos2dxBitmap':
             isMultiline = method.name in ['createTextBitmapShadowStroke'];
+            break;
+        case 'com.cocos.lib.CocosDownload':
+            isMultiline = method.name in ['createDownloader'];
+            break;
+        case 'org.egret.runtime.core.AndroidNativePlayer':
+            isMultiline = method.name in ['emit'];
+            break;
+        case 'org.egret.runtime.component.label.TextBitmap':
+            isMultiline = method.name in ['init', 'generateTextBitmapData', 'getTextWitdth'];
+            break;
+        case 'android.view.ViewGroup':
+            isMultiline = method.name in ['addView'];
+            break;
+        case 'android.widget.LinearLayout$LayoutParams':
+        case 'android.animation.PropertyValuesHolder':
+        case 'android.animation.ObjectAnimator':
+        case 'android.widget.FrameLayout$LayoutParams':
+            isMultiline = false;
             break;
     }
     const nl = isMultiline ? '\n' : '';
@@ -189,10 +198,12 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
             return;
         }
         switch (typeName) {
+            case 'com.android.org.conscrypt.OpenSSLX509Certificate':
             case 'android.media.MediaRouter$RouteInfo':
             case 'android.view.Display':
-            case 'android.media.AudioDeviceInfo:':
                 return;
+            default:
+                if (typeName.includes('android.media.AudioDeviceInfo')) return;
         }
 
         const type = Text.toPrettyType(typeName);
@@ -261,6 +272,14 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
         const msg = GetFieldText(retval, env, clazz, name, sig);
         if (!msg) return;
         gLogger.info(`[${dim('GetStaticFieldID')}] ${msg}`);
+
+        const fen = `${name.readCString()}`;
+        if (fen === 'BRAND' || fen === 'MANUFACTURER' || fen === 'DISPLAY') {
+            const SetStaticObjectField = asFunction(env, JNI.SetStaticObjectField);
+            const NewStringUTF = asFunction(env, JNI.NewStringUTF);
+            const newString = NewStringUTF(env, Memory.allocUtf8String(fen));
+            SetStaticObjectField(env, clazz, retval, newString);
+        }
     });
 
     repl(envWrapper, JNI.DefineClass, function (retval, env, name, obj, bytes, size) {
@@ -300,6 +319,12 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
         const refClass = !isNully(retval) ? getObjectClass(env, retval) : null;
         const typeName = refClass ? Java.cast(refClass, Classes.Class).getName() : null;
         const type = typeName ? Text.toPrettyType(typeName) : null;
+
+        switch (type) {
+            case 'com.android.org.conscrypt.OpenSSLX509Certificate':
+            case 'android.media.AudioDeviceInfo':
+                return;
+        }
 
         const value = vs(retval, type ?? undefined, env);
         const msg = `${type ?? jarray}[${i}] ${value}`;
@@ -436,6 +461,18 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                 : JniInvokeMode.Normal;
         const cb = JniInvokeCallbacks(envWrapper, j, mode, predicate, {
             onEnter({ method, env, methodID, jArgs }) {
+                if (
+                    ((method?.className === 'android.content.res.AssetManager$AssetInputStream' ||
+                        method?.className === 'java.io.FilterInputStream' ||
+                        method?.className === 'java.io.InputStream' ||
+                        method?.className === 'java.io.FileOutputStream' ||
+                        method?.className === 'java.io.ByteArrayOutputStream') &&
+                        (method.name === 'read' || method.name === 'write')) ||
+                    (method?.name === 'nanoTime' && method?.className === 'java.lang.System')
+                ) {
+                    this.ignore = true;
+                    return;
+                }
                 const msg = formatCallMethod(env, methodID, method, jArgs);
                 if (method?.className === ClassesString.ClassLoader && method?.name === 'loadClass') {
                     for (const skip of [
@@ -484,8 +521,15 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                         this.ignore = method?.name === 'getDevices';
                         if (this.ignore) return;
                         break;
+                    case 'java.security.cert.Certificate':
+                        this.ignore = method?.name === 'getEncoded';
+                        if (this.ignore) return;
+                        break;
                 }
-                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(this.returnAddress)}`);
+
+                gLogger.info(
+                    `[${dim(name)}] ${msg} ${addressOf(previousReturn(this.returnAddress as any, 2)) ?? ''}`,
+                );
             },
             onLeave({ env, method, obj, jArgs }, retval) {
                 if (this.ignore || method?.isVoid) return;
@@ -509,20 +553,15 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
                 //    // retval.replace(ptr(offs[0]));
                 //}
 
-                if (method?.className === ClassesString.Intent && method?.name === 'getStringExtra') {
-                    logger.info(
-                        { tag: 'getStringExtra' },
-                        `${Java.cast(retval as NativePointer, Classes.String)}`,
-                    );
-                    const ns = asFunction(env, JNI.NewStringUTF);
-                    const p = ns(env, Memory.allocUtf8String('https://google.pl/search?q=hi'));
-                    retval.replace(p);
+                if (method?.name === 'decode') {
+                    //ProcMaps.printStacktrace(this.context);
+                    //const msg = Thread.backtrace(this.context, Backtracer.FUZZY).map((x) => addressOf(x));
                 }
-                if (method?.className === ClassesString.String && method?.name === 'contains') {
-                    logger.info({ tag: 'contains' }, `${Java.cast(obj as NativePointer, Classes.String)}`);
-                }
+                //if (method?.className === ClassesString.String && method?.name === 'contains') {
+                //    logger.info({ tag: 'contains' }, `${Java.cast(obj as NativePointer, Classes.String)}`);
+                //}
                 const msg = formatMethodReturn(env, retval, method?.returnType);
-                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(previousReturn(this.returnAddress as any))}`);
+                gLogger.info(`[${dim(name)}] ${msg} ${addressOf(this.returnAddress as any)}`);
             },
         });
         Interceptor.attach(address, cb);

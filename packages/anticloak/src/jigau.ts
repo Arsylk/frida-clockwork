@@ -20,10 +20,15 @@ function memoryPatch(name: string = NativeLibName) {
                             Memory.protect(args[0], Process.pointerSize, 'rwx');
                             try {
                                 const arg0 = args[0].readCString();
+                                logger.info(
+                                    { tag: 'jigau' },
+                                    `${found.sub(module?.base ?? 0x0)} arg0: ${arg0}`,
+                                );
                                 if (arg0?.includes('/proc/') && arg0?.includes('/maps')) {
                                     args[0].writeUtf8String('/proc/self/cmdline');
                                 }
                             } catch (e) {}
+                            // Memory.protect(args[0], Process.pointerSize, 'rw-');
                         });
                     },
                     onComplete: () => {

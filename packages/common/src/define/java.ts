@@ -94,8 +94,10 @@ const ClassesString = {
     ContextImpl: 'android.app.ContextImpl',
     Context: 'android.content.Context',
     ContextCompat: 'androidx.core.content.ContextCompat',
+    ContextWrapper: 'android.content.ContextWrapper',
     Executable: 'java.lang.reflect.Executable',
     VMDebug: 'dalvik.system.VMDebug',
+    Debug: 'android.os.Debug',
     Constructor: 'java.lang.reflect.Constructor',
     DisplayManager: 'android.hardware.display.DisplayManager',
     Signature: 'java.security.Signature',
@@ -110,6 +112,15 @@ const ClassesString = {
     Certificate: 'java.security.cert.Certificate',
     UUID: 'java.util.UUID',
     Logger: 'java.util.logging.Logger',
+    UsageStatsManager: 'android.app.usage.UsageStatsManager',
+    UsageEvents: 'android.app.usage.UsageEvents',
+    UsageEvents$Event: 'android.app.usage.UsageEvents$Event',
+    Callable: 'java.util.concurrent.Callable',
+    Pattern: 'java.util.regex.Pattern',
+    Matcher: 'java.util.regex.Matcher',
+    BatteryManager: 'android.os.BatteryManager',
+    NetworkInfo: 'android.net.NetworkInfo',
+    NetworkInfo$State: 'android.net.NetworkInfo$State',
 };
 
 type ClassesType = PropertyJavaUseMapper<typeof ClassesString>;

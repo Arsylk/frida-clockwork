@@ -1,45 +1,12 @@
-import * as Native from '@clockwork/native';
-import { logger, Color } from '@clockwork/logging';
-import { hookException, Linker } from '@clockwork/common';
-const { red, magentaBright: pink, gray, dim, black } = Color.use();
+import { Color, logger } from '@clockwork/logging';
+import { Inject } from './inject.js';
+import { addressOf } from './utils.js';
+import { tryNull } from '@clockwork/common';
+const { red, green, redBright, magentaBright: pink, gray, dim, black, blue } = Color.use();
 
-function dome() {
-    const mod = Process.getModuleByName('libmsaoaidsec.so');
-    Memory.protect(mod.base, mod.size, 'r');
-    const content = mod.base.readByteArray(mod.size);
-    const path = `/data/data/com.cmi.jegotrip/libmos_${mod.base}.so`;
-    File.writeAllBytes(path, content);
-    console.log(path, 'nya');
-}
-
-let done = 0;
-Interceptor.attach(Libc.pthread_create, {
-    onEnter(args) {
-        const args2 = args[2];
-        const mod = Process.getModuleByAddress(args2);
-        const offset = args2.sub(mod.base);
-        console.log(`${mod.name}!pthread_create!${offset} is called`);
-        if (mod.name.includes('libmsaoaidsec') && done++ === 0) {
-            hookException([56], {
-                onBefore(context, num) {
-                    if (num === 56) {
-                        const path = context.x1.readCString();
-                        logger.info(
-                            { tag: 'openat' },
-                            `${path} ${context.x2} ${context.x3} ${context.x4} ${context.x8}`,
-                        );
-                        if (path.endsWith('/maps') || path.endsWith('/stat') || path.endsWith('/status'))
-                            context.x1 = Memory.allocUtf8String('/dev/null');
-                    }
-                },
-            });
-        }
-    },
-});
-
+let atomics = 0;
 function stalk(threadId: number, base: NativePointer) {
     const func_addr: { [key: string]: string } = {};
-    let times = 0;
 
     const stack: { [key: string]: NativePointer } = {};
     const getInstCallTarget = (ctx: Arm64CpuContext, inst: Arm64Instruction) => {
@@ -48,7 +15,7 @@ function stalk(threadId: number, base: NativePointer) {
             const addr = inst.mnemonic === 'bl' ? ptr(inst.operands[0].value) : ctx.x8;
             const key = `${addr.sub(base)}`;
             const debug = DebugSymbol.fromAddress(addr);
-            if (key in rfuncs || debug.name) {
+            if (key in rfuncs) {
                 stack[`${inst.address}`] = addr;
                 return { name: rfuncs[key] ?? debug.name, addr: addr };
             }
@@ -82,9 +49,9 @@ function stalk(threadId: number, base: NativePointer) {
         },
         onReceive: (events: ArrayBuffer) => {},
         transform: (iterator: StalkerArm64Iterator) => {
-            let instruction = iterator.next();
+            let instruction = iterator.next() as Arm64Instruction;
             do {
-                if (Native.Inject.isInOwnRange(instruction.address)) {
+                if (Inject.isInOwnRange(instruction.address)) {
                     //@ts-ignore
                     iterator.putCallout((ctx: Arm64CpuContext) => {
                         const inst = Instruction.parse(ctx.pc) as Arm64Instruction;
@@ -93,29 +60,44 @@ function stalk(threadId: number, base: NativePointer) {
                         const { name, addr } = getInstCallTarget(ctx, inst);
                         if (name || inst.groups.includes('call')) {
                             const prefix = `[${pink(++atomics)}]`;
+                            const debug = DebugSymbol.fromAddress(addr ?? NULL);
+                            const sx0 = tryNull(() => ctx.x0.readCString()) ?? ctx.x0;
+                            const sx1 = tryNull(() => ctx.x1.readCString()) ?? ctx.x1;
                             logger.info(
                                 { tag: 'call' },
-                                `${prefix} ${inst} ${Native.addressOf(addr)} ${name ?? '?'} ${ctx.x0} ${ctx.x1}`,
+                                `${prefix} ${inst} ${blue(`${name ?? debug?.name ?? '?'}`)} { x0: ${sx0}, x1: ${sx1} }`,
                             );
-                            if (atomics === 1) {
-                            }
                         }
-
                         // ret
                         if (inst.groups.includes('return')) {
                             const prevAddr = ctx.lr;
                             const prevInst = Instruction.parse(prevAddr.sub(0x4));
-                            const retVal = ctx.x0;
-                            logger.info({ tag: '#ret' }, `${inst} ${prevAddr} ${retVal}`);
+                            const key = `${prevInst.address}`;
+                            const value = stack[key];
+                            if (value) {
+                                delete stack[`${prevInst.address}`];
+                                const prevName = rfuncs[`${value.sub(base)}`];
+                                const prefix = `[${pink(atomics--)}]`;
+                                const retVal = ctx.x0;
+                                logger.info(
+                                    { tag: '#ret' },
+                                    `${prefix} ${inst} ${prevAddr} ${prevName} ${retVal}`,
+                                );
+                            } else {
+                                const retVal = ctx.x0;
+                                logger.info({ tag: '#ret' }, `${inst} ${prevAddr} ${retVal}`);
+                            }
                         }
                     });
                 }
                 iterator.keep();
-            } while ((instruction = iterator.next()) !== null);
+            } while ((instruction = iterator.next() as Arm64Instruction) !== null);
         },
 
         onCallSummary: (summary) => {},
     });
 }
-let atomics = 0;
+
 const rfuncs = {};
+
+export { stalk };

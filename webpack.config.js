@@ -1,5 +1,5 @@
-import { resolve } from 'path';
-import * as url from 'url';
+import { resolve } from 'node:path';
+import * as url from 'node:url';
 const __dirname = url.fileURLToPath(new URL('..', import.meta.url));
 
 export default {
@@ -27,13 +27,17 @@ export default {
             {
                 test: /\.c$/,
                 type: 'asset',
+                parser: {
+                    dataUrlCondition: {
+                        maxSize: 100 * 1024,
+                    },
+                },
             },
         ],
     },
     resolve: {
         extensions: ['.ts', '.js'],
         alias: {
-            '@reversense/interruptor': resolve(__dirname, 'node_modules/@reversense/interruptor'),
             '@src': '../src/',
         },
         fallback: {

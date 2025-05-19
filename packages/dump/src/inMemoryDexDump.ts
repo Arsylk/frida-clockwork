@@ -6,11 +6,12 @@ import { getSelfFiles } from '@clockwork/native';
 
 function hookInMemoryDexDump() {
     hook(Classes.InMemoryDexClassLoader, '$init', {
-        predicate: (o, i) => i !== 1,
+        predicate: (o, i) => i === 0,
         before(_method, buffer, classLoader) {
             const array = Reflect.has(buffer, 'length') ? buffer : [buffer];
             for (const buf of array) {
-                const path = `${getSelfFiles()}/classesx_${buf.$h}.dex`;
+                const path = `${getSelfFiles()}/classes_${buf.$h}.dex`;
+                buf.position(0);
                 const size = buf.remaining();
 
                 try {

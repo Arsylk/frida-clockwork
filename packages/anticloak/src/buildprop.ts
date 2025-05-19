@@ -11,7 +11,7 @@ function propMapper(key: string): string | undefined | null {
         case 'ro.build.characteristics':
             return 'default';
         case 'ro.build.id':
-            return 'SQ1D.220205.003';
+            return 'TQ3C.230901.001';
         case 'ro.build.type':
             return 'release';
         case 'ro.build.tags':
@@ -58,7 +58,6 @@ function propMapper(key: string): string | undefined | null {
         case 'init.svc.adbd':
         case 'sys.usb.controller':
         case 'sys.usb.state':
-        case 'debug.atrace.tags.enableflags':
             return '';
         case 'ro.boot.vbmeta.digest':
         case 'ro.bootimage.build.fingerprint':

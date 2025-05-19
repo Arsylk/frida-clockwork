@@ -25,14 +25,22 @@ function hookStrstr(
                 function (this: InvocationContext, haystack, needle) {
                     fn?.call(this, haystack, needle);
                     const strNeedle = needle.readCString();
-                    if (strNeedle === 'gmain' || strNeedle === 'gum-js-loop' || strNeedle === 'frida') {
+                    if (
+                        // strNeedle === 'true' ||
+                        strNeedle === 'REJECT' ||
+                        strNeedle === 'linjector' ||
+                        strNeedle === 'gmain' ||
+                        strNeedle === 'gum-js-loop' ||
+                        strNeedle === 'frida'
+                    ) {
                         return NULL;
                     }
                     const strHaystack = haystack.readCString();
-                    const ret = func(haystack, needle);
+                    const ret = strNeedle !== 'ah' ? func(haystack, needle) : haystack;
 
                     if (
                         predicate(this.returnAddress) &&
+                        !strNeedle.includes('TracerPid') &&
                         !strNeedle.includes('"frida:rpc"') &&
                         !strHaystack.includes('Noto Serif') &&
                         !strHaystack.includes('Noto Sans') &&

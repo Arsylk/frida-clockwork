@@ -1,6 +1,9 @@
 import { Color, logger } from '@clockwork/logging';
-import { addressOf } from './index.js';
-import { Text } from '@clockwork/common';
+import { addressOf, isInRange } from './index.js';
+import { emitter, Text } from '@clockwork/common';
+import { toObject } from '@clockwork/common/dist/define/struct.js';
+import { tryDemangle } from './utils.js';
+import { ProcMaps } from '@clockwork/cmodules';
 const { blue, red, magentaBright: pink } = Color.use();
 
 type NatveFunctionCallbacks = {
@@ -11,9 +14,10 @@ type NatveFunctionCallbacks = {
 // using namespace for singleton with all callbacks
 namespace Inject {
     export const ctorIgnored = [
-        'libmain.so',
-        'libil2cpp.so',
-        'libunity.so',
+        'split_module_yandex.odex',
+        'mapper.pixel.so',
+        'libutils.so',
+        'libpl_droidsonroids_gif.so',
         'lib_burst_generated.so',
         'DynamiteLoader.uncompressed.odex',
         'org.apache.http.legacy.odex',
@@ -25,6 +29,7 @@ namespace Inject {
         'DynamiteLoader.uncompressed.odex',
         'libwebviewchromium_plat_support.so',
         'base.odex',
+        'libframework-connectivity-tiramisu-jni.so',
         'libandroid.so',
         'libmonochrome_64.so',
         'libEGL.so',
@@ -37,18 +42,22 @@ namespace Inject {
         'libGLESv2.so',
         'libGLESv2_emulation.so',
         'libGLESv2_adreno.so ',
+        'libGLESv3.so',
         'liblog.so',
         'libc.so',
+        'WebViewGoogle.odex',
         'libstats_jni.so',
         'libsentry.so',
+        'libmmkv.so',
         'libsentry-android.so',
         'libframework-connectivity-tiramisu-jni.so',
         'android.hardware.graphics.mapper@4.0-impl.so',
+        'system@framework@com.android.location.provider.jar@classes.odex',
         'libFirebaseCppApp-8_6_2.so',
         'libil2cpp.so',
         'libmain.so',
         'libunity.so',
-        //'libvulkan.so',
+        'libvulkan.so',
         'libswappy.so',
         'liblog.so',
         'libapp.so',
@@ -56,9 +65,11 @@ namespace Inject {
         'libm.so',
         'libstdc++.so',
         'libdl.so',
+        'libhwui.so',
     ];
 
     export const modules = new ModuleMap();
+    export const ownRanges: { base: NativePointer; size: number }[] = [];
     const initArrayCallbacks: ((this: InvocationContext, name: string) => void)[] = [];
     const prelinkCallbacks: ((this: InvocationContext, module: Module) => void)[] = [];
     const prelinkOnceCallbacks: ((this: InvocationContext, module: Module) => void)[] = [];
@@ -95,6 +106,7 @@ namespace Inject {
                 const thumb = 0; // 1 for thumb
                 const _init_offset = 0x15a8 + thumb;
                 const _init = x2_load_bias.add(_init_offset);
+                modules.update();
 
                 // this is some black magic stuff
                 const _module = Process.findModuleByAddress(_init);
@@ -104,13 +116,13 @@ namespace Inject {
                 const obj = Object.defineProperties(
                     {},
                     {
-                        path: {
-                            value: _module.path,
+                        name: {
+                            value: _module.name,
                             writable: false,
                             enumerable: true,
                         },
-                        name: {
-                            value: _module.name,
+                        path: {
+                            value: _module.path,
                             writable: false,
                             enumerable: true,
                         },
@@ -141,7 +153,7 @@ namespace Inject {
                 if (!libPath) return;
                 const libName = (this.libName = `${libPath.split('/').pop()}`);
                 logger.info({ tag: 'do_dlopen' }, `${libPath}`);
-                modules.update();
+                // modules.update();
 
                 if (ctorIgnored.includes(libName)) return;
                 // TODO investigat
@@ -149,13 +161,13 @@ namespace Inject {
                 const unhook = () => handle?.detach();
                 call_ctor && (handle = Interceptor.attach(call_ctor, ctorListenerCallback(libName, unhook)));
             },
-            onLeave: function (retval) {
+            onLeave: function (_) {
                 modules.update();
                 const libName = this.libName;
-                if (libName) onAfterInitArray(libName, this);
+                this && onAfterInitArray(libName, this);
                 if (this && libName) {
                     const module = Process.findModuleByName(libName);
-                    module && doOnPrelink.call(this, module);
+                    if (module) doOnPrelink.call(this, module);
                 }
             },
         });
@@ -171,22 +183,31 @@ namespace Inject {
         onLeave(retval) {
             logger.info({ tag: 'ctor' }, `${libName} ${blue('<-')} ${retval}`);
             modules.update();
-            detach();
+            // detach();
         },
     });
 
     function doOnPrelink(this: InvocationContext, module: Module) {
+        if (
+            (module.path.startsWith('/data/app/') || module.path.startsWith('/data/data/')) &&
+            !module.path.includes('/com.google.android.trichromelibrary')
+        ) {
+            if (!['libd7B63F61A2760.so', 'libdF552BF19E3C6.so'].includes(module.name)) ownRanges.push(module);
+        }
+
         const key = module.name;
         const unique = !prelinked.has(key);
         prelinked.add(key);
         if (unique) {
-            for (const cb of prelinkOnceCallbacks) {
+            if (prelinkOnceCallbacks.length)
+                for (const cb of prelinkOnceCallbacks) {
+                    cb.call(this, module);
+                }
+        }
+        if (prelinkCallbacks.length)
+            for (const cb of prelinkCallbacks) {
                 cb.call(this, module);
             }
-        }
-        for (const cb of prelinkCallbacks) {
-            cb.call(this, module);
-        }
     }
 
     function onAfterInitArray(libName: string, ctx: InvocationContext) {
@@ -264,6 +285,17 @@ namespace Inject {
     export function isWithinOwnRange(ptr: NativePointer): boolean {
         const path = modules.findPath(ptr);
         return path?.includes('/data') === true && !path.includes('/com.google.android.trichromelibrary');
+    }
+
+    export function isInOwnRange(ptr: NativePointer): boolean {
+        // const ret: NativePointer = Reflect.has(r, 'returnAddress') ? Reflect.get(r, 'returnAddress') : r;
+        const ret = ptr;
+        for (const range of ownRanges) {
+            if (isInRange(range, ret)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

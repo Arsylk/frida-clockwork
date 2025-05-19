@@ -1,5 +1,5 @@
 import { ClassLoader, hook } from '@clockwork/hooks';
-import { dump } from './dump.js';
+import { dump, replace } from './dump.js';
 
 type CocosLocalStorageScope = {
     fallback(): string | null;
@@ -26,4 +26,4 @@ function hookLocalStorage(fn?: (this: CocosLocalStorageScope, key: string) => st
     });
 }
 
-export { hookLocalStorage, dump };
+export { hookLocalStorage, dump, replace };

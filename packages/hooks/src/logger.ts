@@ -65,7 +65,7 @@ const HOOK_LOGGER = {
                 let value = arg;
                 let type = types?.[i] ?? null;
                 const result = config.transform?.(value, type, i) ?? null;
-                if (result) {
+                if (result && isIterable(result)) {
                     const [newarg, newtype] = result;
                     if (newarg !== undefined) value = newarg;
                     if (newtype !== undefined) type = newtype;

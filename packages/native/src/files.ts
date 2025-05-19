@@ -106,39 +106,42 @@ function hookOpen(
         const errstr = !isOk ? ` ${gray(dim(`{${errno}: "${Libc.strerror(errno).readCString()}}"`))}` : '';
         const struri = !isOk ? red(gray(`${uri}`)) : gray(`${uri}`);
         const flagsEnum = flags ? `0b${flags?.toString(2).padStart(16, '0')}` : null;
+        const m = Thread.backtrace(this.context, Backtracer.ACCURATE)
+            .map((x) => addressOf(x))
+            .join('\t\n');
 
         logger.info(
             { tag: key },
-            `${struri} flags: ${flagsEnum}, ${mode ? `mode: ${mode} ${errstr}` : ''} ${addressOf(this.returnAddress)}`,
+            `${struri} flags: ${flagsEnum}, ${mode ? `mode: ${mode} ${errstr}` : ''} ${m}`,
         );
     }
-    Interceptor.replace(
-        Libc.open,
-        new NativeCallback(
-            function (pathname, flags) {
-                if (predicate(this.returnAddress)) {
-                    const pathnameStr = pathname.readCString();
-                    const replaceStr = fn?.call(this, pathnameStr);
-                    const pathArg = replaceStr ? Memory.allocUtf8String(replaceStr) : pathname;
-                    const ret = Libc.open(pathArg, flags);
-                    log.call(
-                        this,
-                        replaceStr ? `${pathnameStr} -> ${replaceStr}` : pathnameStr,
-                        flags,
-                        null,
-                        //@ts-ignore
-                        ret.errno,
-                        'open',
-                    );
-                    return ret.value;
-                }
-                const ret = Libc.open(pathname, flags);
-                return ret.value;
-            },
-            'int',
-            ['pointer', 'int'],
-        ),
-    );
+    // Interceptor.replace(
+    //     Libc.open,
+    //     new NativeCallback(
+    //         function (pathname, flags) {
+    //             if (predicate(this.returnAddress)) {
+    //                 const pathnameStr = pathname.readCString();
+    //                 const replaceStr = fn?.call(this, pathnameStr);
+    //                 const pathArg = replaceStr ? Memory.allocUtf8String(replaceStr) : pathname;
+    //                 const ret = Libc.open(pathArg, flags);
+    //                 log.call(
+    //                     this,
+    //                     replaceStr ? `${pathnameStr} -> ${replaceStr}` : pathnameStr,
+    //                     flags,
+    //                     null,
+    //                     //@ts-ignore
+    //                     ret.errno,
+    //                     'open',
+    //                 );
+    //                 return ret.value;
+    //             }
+    //             const ret = Libc.open(pathname, flags);
+    //             return ret.value;
+    //         },
+    //         'int',
+    //         ['pointer', 'int'],
+    //     ),
+    // );
     // Interceptor.attach(Libc.open, {
     //     onEnter(args) {
     //         this.pathname = args[0];
@@ -327,7 +330,7 @@ function hookDirent(predicate: (ptr: NativePointer) => boolean) {
                 const dirent = !isNully(retval)
                     ? Text.stringify(Struct.toObject(Struct.Dir.dirent(retval)))
                     : ptr(0x0);
-                logger.info({ tag: 'readdir' }, `${dirent}`);
+                logger.info({ tag: 'readdir' }, `${dirent} ${addressOf(this.returnAddress)}`);
             }
         },
     });
@@ -503,12 +506,11 @@ function hookFgets(predicate: (ptr: NativePointer) => boolean, fn?: (line: strin
                 const fd = Libc.fileno(fp).value;
                 const fdp = readFdPath(fd, 64);
                 if (fdp?.endsWith('/status') || fdp?.endsWith('/maps')) {
+                    logger.info({ tag: key }, `${fdp} ${red('SKIP')}`);
                     Libc.lseek(fd, NULL, 2);
                     return NULL;
                 }
                 const m = buffer.readCString()?.trimEnd();
-
-                // logger.info({ tag: key }, `${m}`);
             }
             return retval;
         }

@@ -191,7 +191,7 @@ void backtrace_v0() {
       (uint64_t)__builtin_extract_return_addr(__builtin_return_address(0));
   uintptr_t *frame_ptr = (uintptr_t *)__builtin_frame_address(0);
 
-  /*mem_list *mem_list = read_proc_maps();*/
+  mem_list *mem_list = read_proc_maps();
   int depth = 0;
   while (frame_ptr != NULL && depth < 10) {
     void *return_addr = (void *)*(frame_ptr + 1);
@@ -199,7 +199,7 @@ void backtrace_v0() {
       break;
 
     lib_info *lib = find_lib_info(return_addr);
-    /*mem_info *mem = find_mem_info(mem_list, return_addr);*/
+    mem_info *mem = find_mem_info(mem_list, return_addr);
     dl_info *dl = find_dl_info(return_addr);
 
     frame_ptr = (uintptr_t *)*frame_ptr;
@@ -210,7 +210,7 @@ void backtrace_v0() {
 
     depth += 1;
   }
-  /*mem_list_free(mem_list);*/
+  mem_list_free(mem_list);
 }
 
 // init functios
@@ -222,17 +222,19 @@ void finalize(void) {}
 char *get_backtrace(void *addr) {
   lib_info *lib = find_lib_info(addr);
   if (lib) {
-    mklog("%p %s", lib, lib->name);
+    return g_strdup_printf("%p %s", lib, lib->name);
   }
   dl_info *dl = find_dl_info(addr);
   if (dl) {
-    mklog("%s %s 0x%x 0x%x", dl->dli_fname, dl->dli_sname, dl->dli_fbase,
-          dl->dli_saddr);
+    return g_strdup_printf("%s %s 0x%x 0x%x", dl->dli_fname, dl->dli_sname,
+                           dl->dli_fbase, dl->dli_saddr);
   }
   mem_list *list = (mem_list *)read_proc_maps();
   mem_info *mem = find_mem_info(list, addr);
   if (mem) {
-    mklog("0x%x-0x%x %s %s", mem->start, mem->end, mem->mode, mem->name);
+    mem_list_free(list);
+    return g_strdup_printf("0x%x-0x%x %s %s", mem->start, mem->end, mem->mode,
+                           mem->name);
   }
   mem_list_free(list);
   return "v0";

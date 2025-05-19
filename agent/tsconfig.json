@@ -4,7 +4,5 @@
             "ESNext"
         ],
     },
-    "include": [
-        "../frida-gum.ts"
-    ]
+    "noImplicitAny": false,
 }

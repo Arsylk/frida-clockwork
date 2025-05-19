@@ -1,9 +1,10 @@
+import { tryNull } from '@clockwork/common';
 import { subLogger } from '@clockwork/logging';
 import * as Native from '@clockwork/native';
 import 'frida-il2cpp-bridge';
 const logger = subLogger('unity');
 
-Object.defineProperty(global, 'Il2Cpp', { value: Il2Cpp, writable: false });
+Object.defineProperty(globalThis, 'Il2Cpp', { value: Il2Cpp, writable: false });
 
 function setVersion(version: string) {
     (globalThis as typeof globalThis & { IL2CPP_UNITY_VERSION: string }).IL2CPP_UNITY_VERSION = version;
@@ -62,14 +63,22 @@ function attachScenes() {
 
 function unitypatchSsl() {
     Il2Cpp.perform(() => {
-        const WebRequest = Il2Cpp.domain.assembly('UnityEngine.UnityWebRequestModule').image;
-        const CertificateHandler = WebRequest.class('UnityEngine.Networking.CertificateHandler');
-        const ValidateCertificateNative = CertificateHandler.method<boolean>('ValidateCertificateNative');
-        ValidateCertificateNative.implementation = (...args) => true;
+        tryNull(() => {
+            const WebRequest = Il2Cpp.domain.assembly('UnityEngine.UnityWebRequestModule').image;
+            const CertificateHandler = WebRequest.class('UnityEngine.Networking.CertificateHandler');
+            const ValidateCertificateNative = CertificateHandler.method<boolean>('ValidateCertificateNative');
+            ValidateCertificateNative.implementation = (...args) => true;
+        });
 
-        const TlsProvider = Il2Cpp.domain.assembly('System').image.class('Mono.Unity.UnityTlsProvider');
-        const ValidateCertificate = TlsProvider.method<boolean>('ValidateCertificate');
-        ValidateCertificate.implementation = (...args) => true;
+        tryNull(() => {
+            const TlsProvider = Il2Cpp.domain.assembly('System').image.class('Mono.Unity.UnityTlsProvider');
+            const ValidateCertificate = TlsProvider.method<boolean>('ValidateCertificate');
+            ValidateCertificate.implementation = (...args) => true;
+        });
+        tryNull(() => {
+            const TlsModule = Il2Cpp.domain.assembly('UnityEngine.TLSModule').image;
+            for (const cls of TlsModule.classes) logger.info({ tag: 'il2cls' }, `${cls.name}`);
+        });
     });
 }
 
