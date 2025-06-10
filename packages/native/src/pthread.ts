@@ -5,7 +5,8 @@ import { addressOf, readTidName, tryDemangle } from './utils.js';
 const { bold, dim, green, red, gray, black } = Color.use();
 
 type PthreadCreateHookParams = {
-    before?: (returnAddress: NativePointer, startRoutine: NativePointer) => undefined | null | number;
+    // biome-ignore lint/suspicious/noConfusingVoidType: why ?
+    before?: (returnAddress: NativePointer, startRoutine: NativePointer) => void | undefined | null | number;
     after?: (threadId: number, returnAddress: NativePointer) => void;
 };
 
@@ -15,7 +16,7 @@ function hookPthread_create(params?: PthreadCreateHookParams) {
         Libc.pthread_create,
         new NativeCallback(
             function (thread, attr, start_routine, arg) {
-                const skipValue = before?.(this.returnAddress, start_routine);
+                const skipValue = before?.call(this as InvocationContext, this.returnAddress, start_routine);
                 if (typeof skipValue === 'number' && skipValue !== null && skipValue !== undefined)
                     return skipValue;
 
@@ -23,13 +24,13 @@ function hookPthread_create(params?: PthreadCreateHookParams) {
                 // magic ?
                 const tid = thread.readPointer().add(16).readUInt();
 
-                const method = DebugSymbol.fromAddress(start_routine);
-                const name = tryDemangle(method.name);
+                // const method = addressOf(start_routine);
+                const name = '';
                 const threadName = tryNull(() => readTidName(tid));
 
                 const fTid = dim(ret === 0 ? green(tid) : red(tid));
                 const fThreadName = threadName ? `, ${bold(Text.noLines(threadName))} ` : ' ';
-                const fMethod = `[${gray(`${method.moduleName}`)} ${black(`${name}`)}] ${gray(`${method.address}`)}`;
+                const fMethod = `[${gray(`${''}`)} ${black(`${name}`)}] ${gray(`${start_routine}`)}`;
                 logger.info(
                     { tag: 'pthread_create' },
                     `${gray('tid:')} ${fTid}, ${attr}${fThreadName}${fMethod}, ${!isNully(arg) ? arg.readPointer() : arg} ${addressOf(this.returnAddress)}`,

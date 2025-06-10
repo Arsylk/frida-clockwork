@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import type { Returnable, StructTypes } from '../types.js';
 
 function mock<T>(): () => T {

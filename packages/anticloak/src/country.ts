@@ -1,12 +1,12 @@
-import { Classes, Text } from '@clockwork/common';
+import { Classes, stacktrace, Text } from '@clockwork/common';
 import { Filter, always, hook } from '@clockwork/hooks';
+import { logger } from '@clockwork/logging';
 
 type Config = {
     timezoneId: string;
     mcc: string;
     mnc: string;
     code: string;
-    mccmnc: string;
     locale: [string, string];
     country: string;
     operator: string;
@@ -18,7 +18,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '724',
         mnc: '10',
         code: '55',
-        mccmnc: `${724}${10}`,
         locale: ['BR', 'pt'],
         country: 'br',
         operator: 'Vivo',
@@ -28,7 +27,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '404',
         mnc: '299',
         code: '91',
-        mccmnc: `${404}${299}`,
         locale: ['IN', 'in'],
         country: 'in',
         operator: 'Failed Calls',
@@ -38,7 +36,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '376',
         mnc: '999',
         code: '1340',
-        mccmnc: `${999}${1340}`,
         locale: ['VI', 'vi'],
         country: 'vi',
         operator: 'Fix Line',
@@ -48,7 +45,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '452',
         mnc: '01',
         code: '84',
-        mccmnc: `${452}${1}`,
         locale: ['VN', 'vn'],
         country: 'vn',
         operator: 'MobiFone',
@@ -58,7 +54,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '255',
         mnc: '999',
         code: '79',
-        mccmnc: `${255}${999}`,
         locale: ['RU', 'ru'],
         country: 'ru',
         operator: 'Fix Line',
@@ -68,7 +63,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '510',
         mnc: '11',
         code: '62',
-        mccmnc: `${510}${11}`,
         locale: ['ID', 'id'],
         country: 'id',
         operator: 'XL',
@@ -78,7 +72,6 @@ const Configurations: { [key: string]: Config } = {
         mcc: '515',
         mnc: '03',
         code: '63',
-        mccmnc: `${515}${3}`,
         locale: ['PH', 'fil'],
         country: 'ph',
         operator: 'Smart',
@@ -88,10 +81,63 @@ const Configurations: { [key: string]: Config } = {
         mcc: '312',
         mnc: '080',
         code: '63',
-        mccmnc: `${515}${3}`,
         locale: ['EN', 'us'],
         country: 'us',
         operator: 'AT&T Mobility',
+    },
+    TH: {
+        timezoneId: 'Asia/Bangkok',
+        mcc: '520',
+        mnc: '04',
+        code: '66',
+        locale: ['TH', 'th'],
+        country: 'th',
+        operator: 'TrueMove H',
+    },
+    NN: {
+        timezoneId: 'Asia/Ho_Chi_Minh',
+        mcc: '452',
+        mnc: '01',
+        code: '84',
+        locale: ['no', 'ni'],
+        country: 'ni',
+        operator: 'MobiFone',
+    },
+    KR: {
+        timezoneId: 'Asia/Seoul',
+        mcc: '450',
+        mnc: '08',
+        code: '82',
+        locale: ['KR', 'ko'],
+        country: 'kr',
+        operator: 'olleh / KT',
+    },
+    PK: {
+        timezoneId: 'Asia/Karachi',
+        mcc: '410',
+        mnc: '04',
+        code: '92',
+        locale: ['PK', 'ur'],
+        country: 'pk',
+        operator: 'Zong',
+    },
+    TR: {
+        timezoneId: 'Europe/Istanbul',
+        mcc: '286',
+        mnc: '299',
+        code: '90',
+        locale: ['TR', 'tr'],
+        country: 'tr',
+        operator: 'Asistan Telekom',
+    },
+    BD: {
+        timezoneId: 'Asia/Dhaka',
+        mcc: '470',
+        mnc: '03',
+        code: '90',
+        locale: ['BD', 'bn'],
+        country: 'bd',
+        operator: 'Banglalink',
     },
 };
 
@@ -101,16 +147,17 @@ function mock(keyOrConfig: Config | keyof typeof Configurations) {
     const config = typeof keyOrConfig === 'object' ? (keyOrConfig as Config) : Configurations[keyOrConfig];
 
     const number = `${config.code}${Text.stringNumber(10)}`;
-    const subscriber = `${config.mccmnc}${Text.stringNumber(15 - config.mccmnc.length)}`;
+    const mccmnc = `${config.mcc}${config.mnc}`;
+    const subscriber = `${mccmnc}${Text.stringNumber(15 - mccmnc.length)}`;
     hook(Classes.TelephonyManager, 'getLine1Number', { replace: always(number) });
     hook(Classes.TelephonyManager, 'getSimOperator', {
-        replace: always(config.mccmnc),
+        replace: always(mccmnc),
     });
     hook(Classes.TelephonyManager, 'getSimOperatorName', {
         replace: always(config.operator),
     });
     hook(Classes.TelephonyManager, 'getNetworkOperator', {
-        replace: always(config.mccmnc),
+        replace: always(mccmnc),
     });
     hook(Classes.TelephonyManager, 'getNetworkOperatorName', {
         replace: always(config.operator),

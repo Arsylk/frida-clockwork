@@ -1,272 +1,281 @@
-import * as Anticloak from '@clockwork/anticloak';
-import { ProcMaps } from '@clockwork/cmodules';
-import { Linker } from '@clockwork/common';
+import { Debug, HideMaps as Hide } from '@clockwork/anticloak';
+import { memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
+import { Linker, Struct, Text, hookException } from '@clockwork/common';
 import { dumpLib } from '@clockwork/dump';
-import { Color, logger } from '@clockwork/logging';
-import { getSelfProcessName } from '@clockwork/native';
+import { logger } from '@clockwork/logging';
 import * as Native from '@clockwork/native';
-import * as JniTrace from '@clockwork/jnitrace';
-const { red, green, redBright, magentaBright: pink, gray, dim, black } = Color.use();
 
-const predicate: (ptr: NativePointer) => true | undefined = () => true;
-
-Native.attachSystemPropertyGet(predicate, (key) => {
-    const value = Anticloak.BuildProp.propMapper(key);
-    return value;
+Object.defineProperty(globalThis, 'runme', {
+    value: Script.nextTick.bind(null, dumpLib.bind(null, 'libjiagu.so')),
 });
 
-// JniTrace.attach((r) => Native.predicate(r.returnAddress), true);
-
-// Native.Files.hookFopen(predicate, true, (path) => {
-//     if (path?.endsWith('/su') || path?.endsWith('/mountinfo') || path?.endsWith('/maps')) {
-//         return path.replace(/\/(su|mountinfo|maps)$/, '/nya');
-//     }
-//     if (
-//         path?.includes('magisk') ||
-//         path?.includes('supolicy') ||
-//         path?.toLowerCase()?.includes('superuser')
-//     ) {
-//         return path.replace(/(magisk|supolicy|superuser)/gi, 'nya');
-//     }
-// });
-Interceptor.replace(
-    Libc.popen,
-    new NativeCallback(
-        (a0, a1) => {
-            logger.info({ tag: 'popen' }, `${a0.readCString()}`);
-            return Libc.popen(Memory.allocUtf8String('nya'), a1);
-        },
-        'pointer',
-        ['pointer', 'pointer'],
-    ),
-);
-
-Native.Pthread.hookPthread_create();
-Native.Files.hookFgets(predicate);
-Native.Files.hookOpen(
-    (r) => !ProcMaps.isFridaAddress(r),
-    (path) => {
-        if (path?.endsWith('/build.prop')) return '/dev/null';
-        if (path?.endsWith('/maps')) return '/dev/null';
-        if (path?.endsWith('/status')) return '/proc/9/status';
-        if (path?.includes('classes') && path?.includes('.dex')) dumpLib('libjiagu_64.so', true);
-    },
-);
-
-setImmediate(
-    Java.perform.bind(Java, () => {
-        Classes.Thread.sleep(5_000);
-    }),
-);
-
-Native.Inject.onPrelinkOnce((module) => {
-    const isNotFrida = (r: NativePointer) => !ProcMaps.isFridaAddress(r);
-    const { base, name, size } = module;
-    if (name === 'libjiagu_64.so') {
-        Linker.patchSoList();
-        Native.log(Libc.dlopen, 'si', { predicate: isNotFrida });
-        Native.Files.hookDirent(isNotFrida);
-        Native.Files.hookOpendir(isNotFrida, (path) => {
-            if (
-                path?.startsWith('/proc') &&
-                (path?.includes('/task') ||
-                    path.endsWith('/fd') ||
-                    path.endsWith('/status') ||
-                    path.endsWith('/fs/jbd2'))
-            )
-                return '/dev/null';
-        });
-        return;
-
-        Native.log(Libc.open, 'si', {
-            call(args) {
-                this.path = args[0];
-            },
-            ret(retval) {
-                const fd = retval.toInt32();
-                const fdp = this.path.readCString();
-                if (fdp?.endsWith('/status') || fdp?.endsWith('/maps') || fdp?.endsWith('/comm')) {
-                    Libc.close(fd);
-                }
-            },
-        });
-        // Native.log(Libc.read, 'iip', { predicate: (ret) => !Native.addressOf(ret).includes('libbase') });
-        // hookException([160], {
-        //     onBefore({ x0 }, num) {
-        //         switch (num) {
-        //             case 160:
-        //                 this._x0 = x0;
-        //                 break;
-        //         }
-        //     },
-        //     onAfter({ x0 }, num) {
-        //         switch (num) {
-        //             case 160:
-        //                 {
-        //                     const addr = this._x0.add(0x41 * 2);
-        //                     const text = addr.readCString().toLowerCase();
-        //
-        //                     for (const key of ['ksu', 'kernelsu', 'lineage', 'dirty']) {
-        //                         const i = text.indexOf(key);
-        //                         if (i !== -1) {
-        //                             addr.add(i).writeByteArray(new Array(key.length).fill(0x0));
-        //                         }
-        //                     }
-        //                 }
-        //                 break;
-        //         }
-        //     },
-        // });
-
-        // Native.Strings.hookStrstr((r) => !ProcMaps.isFridaAddress(r));
-        // Native.Files.hookReadlink((r) => !ProcMaps.isFridaAddress(r));
-        // Native.Files.hookAccess((r) => !ProcMaps.isFridaAddress(r));
-        return;
-        Interceptor.replace(
-            Libc.open,
-            new NativeCallback(
-                (pathnameptr, flag) => {
-                    const pathname = pathnameptr.readCString();
-                    logger.info({ tag: 'open' }, `${pathname} ${flag}`);
-                    if (pathname?.startsWith('/proc/') && pathname?.endsWith('/maps')) {
-                        const path = `${Native.getSelfFiles()}/fd/`;
-                        Native.mkdir(path);
-                        const newpathname = `${path}${pathname.replaceAll('/', '_')}`;
-
-                        const _contents = File.readAllText(pathname)
-                            .split('\n')
-                            .filter((line) => !line.includes('/tmp'))
-                            .filter((line) => !line.includes('com.android.adb'))
-                            .filter((line) => !line.includes('frida'))
-                            .filter((line) => !line.includes('libadb'))
-                            .filter((line) => !line.includes('shadow map'))
-                            .filter((line) => !line.includes('startup_agent'))
-                            .filter((line) => !line.includes('libperfetto_hprof'))
-                            .filter((line) => !line.includes('libopenjdkjvmti'))
-                            .filter((line) => !line.includes('libnpt'))
-                            .filter((line) => !line.includes('libdt_fd_forward'))
-                            .filter((line) => !line.includes('jwdp'))
-                            .filter((line) => !(line.includes('rwxp') && line.includes('libart.so')))
-                            .filter((line) => !line.includes('boot'))
-                            .filter((line) => !(line.includes('rwxp') && line.includes('libGLESv1_CM.so')))
-                            .filter((line) => !line.match(/r[w-][x-]p .+\/memfd:jit-cache/))
-                            .join('\n');
-                        File.writeAllText(newpathname, '');
-
-                        return Libc.open(Memory.allocUtf8String(newpathname), flag).value;
-                    }
-                    const realFd = Libc.open(pathnameptr, flag).value;
-                    return realFd;
-                },
-                'int',
-                ['pointer', 'int'],
-            ),
-        );
-        const s = () => dumpLib('libjiagu_64.so');
-
-        // let _arg: any = null;
-        // Native.log(Libc.dladdr, 'pp', {
-        //     call(args) {
-        //         _arg = args[1];
-        //     },
-        //     ret(retval) {
-        //         logger.info(
-        //             { tag: 'dladdr' },
-        //             `${_arg.readPointer().readCString()} ${_arg
-        //                 .add(0x8 * 2)
-        //                 .readPointer()
-        //                 .readCString()}`,
-        //         );
-        //         logger.info(
-        //             { tag: 'dladdr' },
-        //             `${_arg.add(0x8).readPointer()} ${_arg.add(0x8 * 3).readPointer()}`,
-        //         );
-        //     },
-        // });
-        Native.log(Libc.strrchr, 'sc');
-        // Native.log(
-        //     Process.getModuleByName('libart.so')
-        //         .enumerateSymbols()
-        //         .filter((x) => x.name.includes('art_sigsegv_fault'))[0].address,
-        //     '',
-        //     {
-        //         call(args) {
-        //             printStacktrace(this.context, this.returnAddress);
-        //         },
-        //     },
-        // );
-        //
-        // Native.log(
-        //     Process.getModuleByName('libsigchain.so')
-        //         .enumerateExports()
-        //         .filter((x) => x.name.includes('signal'))[0].address,
-        //     '',
-        //     {
-        //         call(args) {
-        //             printStacktrace(this.context, this.returnAddress);
-        //         },
-        //     },
-        // );
-        // Native.log(module.getExportByName('inotify_init'), '');
-
-        //Native.log(Libc.open, 'si', {
-        //    ret(retval) {
-        //        ProcMaps.printStacktrace(this.context);
-        //    },
-        //});
-        // Native.log(Libc.memmove, 'ppi', {
-        //     nolog: true,
-        //     predicate: (ret) => !ProcMaps.isFridaAddress(ret),
-        //     call(args) {
-        //         const size = args[2].toInt32();
-        //         const a1 = hexdump(args[1], {
-        //             header: false,
-        //             ansi: true,
-        //             length: Math.min(size, 0xf * 6),
-        //         });
-        //         if (size === 1531368) {
-        //             logger.info({ tag: 'path' }, `${args[0]}`);
-        //             globalThis.__arg.writePointer(args[0]);
-        //         }
-        //         // logger.info({ tag: 'memmove' }, `\n${a1}`);
-        //         // logger.info(
-        //         //     { tag: 'memmove' },
-        //         //     '==============================================================================',
-        //         // );
-        //     },
-        // });
-        // Native.log(Libc.memcmp, 'ppi', {
-        //     //base: Module.getBaseAddress('libjiagu_64.so'),
-        //     predicate: (ret) => !ProcMaps.isFridaAddress(ret),
-        //     call(args) {
-        //         const size = args[2].toInt32();
-        //         const a0 = hexdump(args[0], { header: false, ansi: true, length: Math.min(size, 0xf) });
-        //         const a1 = hexdump(args[1], {
-        //             header: false,
-        //             ansi: true,
-        //             length: Math.min(size, 0xf * 6),
-        //         });
-        //         logger.info({ tag: 'memcmp' }, `\n${a0}`);
-        //         logger.info({ tag: 'memcmp' }, `\n${a1}`);
-        //         logger.info(
-        //             { tag: 'memcmp' },
-        //             '==============================================================================',
-        //         );
-        //     },
-        // });
-        //Native.Files.hookDirent(() =>
-        //Native.Files.hookOpendir(
-        //    () => truea0,
-        //    (path) => {
-        //        if (
-        //            path?.startsWith('/proc') &&
-        //            (path?.includes('/task') ||
-        //                path.endsWith('/fd') ||
-        //                path.endsWith('/status') ||
-        //                path.endsWith('/fs/jbd2'))
-        //        )
-        //            return '/dev/null';
-        //    },
-        //);
+// JniTrace.attach((x) => Native.Inject.isInOwnRange(x.returnAddress), false);
+function ba2hex(b: ArrayBuffer): string {
+    const uint8arr = new Uint8Array(b);
+    if (!uint8arr) {
+        return '';
     }
+    let hexStr = '';
+    for (let i = 0; i < uint8arr.length; i++) {
+        let hex = (uint8arr[i] & 0xff).toString(16);
+        hex = hex.length === 1 ? `0${hex}` : hex;
+        hexStr += hex;
+    }
+    return hexStr;
+}
+
+Debug.hookPtrace();
+Native.Strings.hookStrstr(Native.Inject.isInOwnRange);
+Native.Pthread.hookPthread_create();
+Process.attachModuleObserver({
+    onAdded(module: Module) {
+        const { name, base, size, path } = module;
+        if (
+            (path.startsWith('/data/app/') || path.startsWith('/data/data/')) &&
+            !path.includes('/com.google.android.trichromelibrary') &&
+            !path.includes('(deleted)')
+        ) {
+            Native.Inject.ownRanges.push(module);
+        }
+        logger.info({ tag: 'phdr_init' }, Text.stringify({ name: name, base: base, size: size, path: path }));
+        if (name === 'base.odex') {
+            Linker.patchSoList((name: string) => name.startsWith('/memfd:') || name.includes(' (deleted)'));
+            ProcMaps.addRange(module);
+        }
+        if (
+            [
+                'l35cd1c2a.so',
+                'libXYLUXam.so',
+                'libjiagu.so',
+                'l7d15e546.so',
+                'libshield.so',
+                'libnp.so',
+                'libcovault-appsec.so',
+                'libmtprotect.so',
+            ].includes(name)
+        ) {
+            ProcMaps.addRange(module);
+            Native.log(Module.getGlobalExportByName('uncompress'), 's', {
+                call(args) {
+                    this.arg0 = args[0];
+                },
+                ret(retval) {
+                    logger.info({ tag: 'uncompress' }, hexdump(this.arg0));
+                },
+            });
+            Native.log(base.add(0x159104), 'hp');
+            Native.log(base.add(0x44324), '0ppp4', {
+                transform: {
+                    '0': (ptr) => ba2hex(ptr.readByteArray(0x18)),
+                    '4': (ptr) => DebugSymbol.fromAddress(ptr.readPointer()).toString(),
+                },
+                call(args) {
+                    const ctx = this.context as Arm64CpuContext;
+                    logger.info(
+                        { tag: '0x44324' },
+                        `\n${Text.stringify({ pc: ctx.pc.sub(base), lr: ctx.lr.sub(base), fp: ctx.fp.sub(base) })}`,
+                    );
+                },
+            });
+            Interceptor.attach(
+                Libc.memmove,
+                memmove as InvocationListenerCallbacks | InstructionProbeCallback,
+            );
+
+            Interceptor.attach(Libc.memcmp, memcmp as InvocationListenerCallbacks | InstructionProbeCallback);
+
+            hookException([56, 62], {
+                onBefore(context, num) {
+                    if (num === 56) {
+                        const path = context.x1.readCString();
+                        this.path = path;
+                        const mode = context.x2.toInt32();
+                        this.mode = mode;
+                        logger.info({ tag: '__openat' }, `${path} ${context.x0}`);
+                    } else if (num === 62) {
+                        const fd = Native.readFdPath(context.x0.toInt32());
+                        logger.info({ tag: 'lseek' }, `${fd}!${context.x1} ${context.x2.toUInt32()}`);
+                    } else if (num === 63 || num === 67) {
+                        const fd = context.x0.toInt32();
+                        const fds = Native.readFdPath(fd);
+                        this.fd = fds;
+                        this.buf = context.x1;
+                        this.size = context.x2.toInt32();
+                        this.tell = Libc.lseek(fd, NULL, 1);
+                    } else if (num === 78) {
+                        this.path = context.x1.readCString();
+                        this.buf = context.x2;
+                        this.bufsize = context.x3.toInt32();
+                    } else if (num === 130) {
+                        logger.info({ tag: 'tkill' }, `${context.x0.toInt32()}`);
+                    } else if (num === 134) {
+                        logger.info({ tag: 'rt_sigaction' }, `${context.x0.toInt32()}`);
+                    }
+                },
+                onAfter(context, num) {
+                    if (num === 56) {
+                        const path = this.path;
+                        if (path?.endsWith('/maps')) {
+                            const numFd = context.x0.toInt32();
+                            if (numFd > 0) {
+                                Libc.close(numFd);
+                            }
+                            const arg1ptr = this.rawargs.add((1 + 1) * Process.pointerSize);
+                            arg1ptr.writePointer(Memory.allocUtf8String('/dev/nya'));
+                            this.redo_call();
+                        }
+                        if (path?.endsWith('classes2.dex')) {
+                            const buf = Memory.alloc(0xff);
+                            Libc.pread(context.x0.toInt32(), buf, 0xff, 0);
+                            logger.info({ tag: 'dex' }, ba2hex(buf.readByteArray(0xff)));
+                            dumpLib(name, true);
+                        }
+                    } else if (num === 63) {
+                        const length = context.x0.toInt32();
+                        const content = this.buf.readCString(length);
+                        const patch = content.replace(/frida/gi, 'nyasi');
+                        // this.buf.writeUtf8String(patch);
+                        logger.info(
+                            { tag: 'read' },
+                            `${this.fd}!${this.tell} ${length}:${this.size} -> \n${content}`,
+                        );
+                    } else if (num === 67) {
+                        const length = context.x0.toInt32();
+                        const content = hexdump(this.buf, { length: length, ansi: true });
+                        const patch = content.replace(/frida/gi, 'nyasi');
+                        // this.buf.writeUtf8String(patch);
+                        logger.info({ tag: 'pread64' }, `${this.fd} -> \n${content}`);
+                    } else if (num === 78) {
+                        const result = this.buf.readCString(this.bufsize);
+                        logger.info({ tag: 'readlinkat' }, `${this.path} -> ${result}`);
+                    }
+                },
+            });
+            // Native.log(Process.getModuleByName('libdl.so').getExportByName('dlopen'), 'si');
+
+            const c: (t: string) => string = (t) => t;
+            // const c_strlen = (x: string) =>
+            //     new CModule(x, {
+            //         frida_log: new NativeCallback(
+            //             (str) => {
+            //                 const msg = str.readCString();
+            //                 logger.info({ tag: 'strlen' }, `${msg}`);
+            //             },
+            //             'void',
+            //             ['pointer'],
+            //         ),
+            //     }) as any;
+            // Interceptor.attach(
+            //     Libc.strlen,
+            //     c_strlen(
+            //         c(`
+            //       #include <gum/guminterceptor.h>
+            //       #include <stdio.h>
+            //       typedef unsigned long long u64;
+            //       void* BASE = (void *) ${base};
+            //       void* SIZE = (void *) ${size};
+            //
+            //       typedef struct _IcState IcState;
+            //       struct _IcState {
+            //         char *arg0;
+            //         void *retaddr;
+            //         int log;
+            //       };
+            //
+            //       extern void frida_log(void *str);
+            //       static void mklog(const char *format, ...) {
+            //           gchar *message;
+            //           va_list args;
+            //           va_start(args, format);
+            //           message = g_strdup_vprintf(format, args);
+            //           va_end(args);
+            //           frida_log(message);
+            //           g_free(message);
+            //       }
+            //
+            //       void onEnter(GumInvocationContext * ic) {
+            //         IcState *is = GUM_IC_GET_INVOCATION_DATA(ic, IcState);
+            //         is->arg0 = gum_invocation_context_get_nth_argument(ic, 0);
+            //         is->retaddr = (void *) gum_invocation_context_get_return_address(ic);
+            //         if ((u64) BASE <= (u64)is->retaddr && (u64)BASE + (u64)SIZE > (u64)is->retaddr) {
+            //             is->log = 1;
+            //         } else {
+            //             is->log = 0;
+            //         }
+            //       };
+            //       void onLeave(GumInvocationContext * ic) {
+            //         IcState *is = GUM_IC_GET_INVOCATION_DATA(ic, IcState);
+            //         u64 retval = (u64) gum_invocation_context_get_return_value(ic);
+            //         if (is->log == 1) {
+            //             mklog("%s = %d %p", is->arg0, retval, (u64)is->retaddr-(u64)BASE);
+            //         }
+            //       };
+            //     `),
+            //     ),
+            // );
+
+            type ntype = NativeFunction<number, [NativePointer, NativePointer, NativePointer]>;
+            const argpget = (original: ntype) =>
+                new NativeCallback(
+                    // biome-ignore lint/complexity/useArrowFunction:
+                    function (a0, a1, a2) {
+                        const dlinfo = Struct.Linker.dl_phdr_info(a0);
+                        logger.info(
+                            { tag: 'dl_iterate_phdr', id: 'callback' },
+                            `${Text.stringify(Struct.toObject(dlinfo))}`,
+                        );
+                        return original(a0, a1, a2);
+                    },
+                    'int',
+                    ['pointer', 'pointer', 'pointer'],
+                );
+            Native.log(Libc.dl_iterate_phdr, 'ph', {
+                predicate: Native.bindInRange(module),
+                call(args) {
+                    args[0] = argpget(new NativeFunction(args[0], 'int', ['pointer', 'pointer', 'pointer']));
+                },
+            });
+            // Native.Files.hookAccess(Native.bindInRange(module));
+            // Native.Files.hookOpendir(Native.bindInRange(module));
+            // Native.Files.hookDirent(Native.bindInRange(module));
+            Native.log(Libc.mmap, 'pi23', {
+                predicate: Native.bindInRange(module),
+                transform: {
+                    2: (ptr) => {
+                        if (!ptr) return 'PROT_NONE';
+                        return (
+                            [
+                                [1, 'PROT_READ'],
+                                [2, 'PROT_WRITE'],
+                                [4, 'PROT_EXEC'],
+                            ] as const
+                        )
+                            .filter(([f, _]) => f & Number(ptr))
+                            .map(([_, s]) => s)
+                            .join(' | ');
+                    },
+                    3: (ptr) => {
+                        return (
+                            [
+                                [1, 'MAP_SHARED'],
+                                [2, 'MAP_PRIVATE'],
+                                [3, 'MAP_SHARED_VALIDATE'],
+                                [8, 'MAP_DROPPABLE'],
+                            ] as const
+                        )
+                            .filter(([f, _]) => f & Number(ptr))
+                            .map(([_, s]) => s)
+                            .join(' | ');
+                    },
+                },
+                call(args) {
+                    this.size = args[1].toInt32();
+                },
+                ret(retval) {
+                    const cmd = `adb shell dd if=/proc/${Process.id}/mem of=/data/local/tmp/${retval}_${retval.add(this.size)}.mem bs=1 skip=${retval.toUInt32()} count=${this.size}`;
+                    logger.info({ tag: 'adb' }, cmd);
+                },
+            });
+        }
+    },
 });

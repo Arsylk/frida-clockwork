@@ -37,9 +37,6 @@
             "path": "packages/dump"
         },
         {
-            "path": "packages/interruptor"
-        },
-        {
             "path": "packages/cmodules"
         }
     ]

@@ -1,5 +1,7 @@
+import Java from 'frida-java-bridge';
 import { ProcMaps } from '@clockwork/cmodules';
 import { Libc, Consts } from '@clockwork/common';
+import { Text } from '@clockwork/common';
 import { Color, logger } from '@clockwork/logging';
 const { gray, black } = Color.use();
 
@@ -17,22 +19,33 @@ function mkdir(path: string): boolean {
         Libc.closedir(dir);
         return false;
     }
-    Libc.mkdir(cPath, 755);
-    Libc.chmod(cPath, 755);
+    Libc.mkdir(cPath, 0o755);
+    Libc.chmod(cPath, 0o755);
     dellocate(cPath);
 
     return true;
 }
 
 function getSelfProcessName(): string | null {
-    const path = Memory.allocUtf8String('/proc/self/cmdline');
-    const { value: fd } = Libc.open(path, 0);
-    dellocate(path);
-    if (fd !== -1) {
-        const buffer = Memory.alloc(0x1000);
-        Libc.read(fd, buffer, 0x1000);
-        Libc.close(fd);
-        return buffer.readCString();
+    const cached = Reflect.get(globalThis, 'packageName');
+    if (cached) return cached;
+
+    const filename = Memory.allocUtf8String('/proc/self/cmdline');
+    const mode = Memory.allocUtf8String('r');
+    const { value: file } = Libc.fopen(filename, mode);
+
+    if (!file.isNull()) {
+        const buffer = Memory.alloc(256);
+        const bytesRead = Libc.fread(buffer, 1, 255, file);
+        Libc.fclose(file);
+
+        if (bytesRead > 0) {
+            const value = buffer.readCString(bytesRead)?.replace(/�/gi, '') ?? null;
+            if (value && value.length > 0) {
+                Reflect.set(globalThis, 'packageName', value);
+                return value;
+            }
+        }
     }
     return null;
 }
@@ -50,8 +63,10 @@ Object.defineProperties(addressOf, {
         value: (ptr: NativePointer) => ptr,
     },
 });
+
 function addressOf(ptr: NativePointer, extended?: boolean) {
-    const str = ProcMaps.addressOf(ptr);
+    if (!ptr || ptr === NULL || `${ptr}` === '0x0') return;
+    const str = `${ProcMaps.addressOf(ptr)}`;
     return str;
 
     const surround = (str: any) => `${black('⟨')}${str}${black('⟩')}`;
@@ -113,7 +128,7 @@ function readFdPath(fd: number, bufsize: number = Consts.PATH_MAX): string | nul
     const buf = Memory.alloc(bufsize);
     const path = Memory.allocUtf8String(`/proc/self/fd/${fd}`);
 
-    const _ = Libc.readlink(path, buf, bufsize);
+    const _ = Libc.readlinkat(0, path, buf, bufsize);
     const str = buf.readCString();
     dellocate(buf);
     dellocate(path);
@@ -129,9 +144,23 @@ function readFpPath(fp: NativePointer): string | null {
 }
 
 function readTidName(tid: number): string {
-    if (tid <= 0) return '';
-    //@ts-ignore
-    return File.readAllText(`/proc/self/task/${tid}/comm`);
+    if (!tid || tid <= 0) return '';
+    const fd = Libc.syscall_openat(
+        56,
+        0,
+        Memory.allocUtf8String(`/proc/self/task/${tid}/comm`),
+        'r'.charCodeAt(0),
+    );
+    if (fd !== -1) {
+        const buffer = Memory.alloc(16);
+        Libc.read(fd, buffer, 16);
+        const str = buffer.readCString();
+        dellocate(buffer);
+        return Text.noLines(str);
+    }
+    return '';
+    // this seems unstable when hooking other things
+    // return File.readAllText(`/proc/self/task/${tid}/comm`);
 }
 
 function tryDemangle<T extends string | null>(name: T): T {
@@ -151,7 +180,7 @@ function tryDemangle<T extends string | null>(name: T): T {
     return name;
 }
 
-const sscanf = new NativeFunction(Module.getExportByName('libc.so', 'sscanf'), 'int', [
+const sscanf = new NativeFunction(Module.getGlobalExportByName('sscanf'), 'int', [
     'pointer',
     'pointer',
     'pointer',

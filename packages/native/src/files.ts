@@ -1,4 +1,4 @@
-import { Libc, Struct, isNully, Text, printStacktrace } from '@clockwork/common';
+import { Libc, Struct, isNully, Text } from '@clockwork/common';
 import { Color, logger } from '@clockwork/logging';
 import { addressOf, readFdPath } from './utils.js';
 import { unbox } from './index.js';
@@ -106,39 +106,42 @@ function hookOpen(
         const errstr = !isOk ? ` ${gray(dim(`{${errno}: "${Libc.strerror(errno).readCString()}}"`))}` : '';
         const struri = !isOk ? red(gray(`${uri}`)) : gray(`${uri}`);
         const flagsEnum = flags ? `0b${flags?.toString(2).padStart(16, '0')}` : null;
+        const m = Thread.backtrace(this.context, Backtracer.ACCURATE)
+            .map((x) => addressOf(x))
+            .join('\t\n');
 
         logger.info(
             { tag: key },
-            `${struri} flags: ${flagsEnum}, ${mode ? `mode: ${mode} ${errstr}` : ''} ${addressOf(this.returnAddress)}`,
+            `${struri} flags: ${flagsEnum}, ${mode ? `mode: ${mode} ${errstr}` : ''} ${m}`,
         );
     }
-    Interceptor.replace(
-        Libc.open,
-        new NativeCallback(
-            function (pathname, flags) {
-                if (predicate(this.returnAddress)) {
-                    const pathnameStr = pathname.readCString();
-                    const replaceStr = fn?.call(this, pathnameStr);
-                    const pathArg = replaceStr ? Memory.allocUtf8String(replaceStr) : pathname;
-                    const ret = Libc.open(pathArg, flags);
-                    log.call(
-                        this,
-                        replaceStr ? `${pathnameStr} -> ${replaceStr}` : pathnameStr,
-                        flags,
-                        null,
-                        //@ts-ignore
-                        ret.errno,
-                        'open',
-                    );
-                    return ret.value;
-                }
-                const ret = Libc.open(pathname, flags);
-                return ret.value;
-            },
-            'int',
-            ['pointer', 'int'],
-        ),
-    );
+    // Interceptor.replace(
+    //     Libc.open,
+    //     new NativeCallback(
+    //         function (pathname, flags) {
+    //             if (predicate(this.returnAddress)) {
+    //                 const pathnameStr = pathname.readCString();
+    //                 const replaceStr = fn?.call(this, pathnameStr);
+    //                 const pathArg = replaceStr ? Memory.allocUtf8String(replaceStr) : pathname;
+    //                 const ret = Libc.open(pathArg, flags);
+    //                 log.call(
+    //                     this,
+    //                     replaceStr ? `${pathnameStr} -> ${replaceStr}` : pathnameStr,
+    //                     flags,
+    //                     null,
+    //                     //@ts-ignore
+    //                     ret.errno,
+    //                     'open',
+    //                 );
+    //                 return ret.value;
+    //             }
+    //             const ret = Libc.open(pathname, flags);
+    //             return ret.value;
+    //         },
+    //         'int',
+    //         ['pointer', 'int'],
+    //     ),
+    // );
     // Interceptor.attach(Libc.open, {
     //     onEnter(args) {
     //         this.pathname = args[0];
@@ -249,7 +252,6 @@ function hookFopen(
                     let replaceStr = fn?.call(this, `${fd}`);
                     if (statfd) replaceStr ??= fn?.call(this, readFdPath(fd));
 
-                    printStacktrace.call(this.context, this.returnAddress);
                     let errno: any;
                     if (replaceStr) {
                         const replacePtr = Memory.allocUtf8String(replaceStr);
@@ -291,13 +293,14 @@ function hookOpendir(predicate: (ptr: NativePointer) => boolean, fn?: (path: str
                     const pathnameStr = pathname.readCString();
                     const replaceStr = fn?.call(this, pathnameStr);
                     const pathArg = replaceStr ? Memory.allocUtf8String(replaceStr) : pathname;
-                    ret = Libc.opendir(pathArg);
+                    ret = Libc.opendir(pathname);
 
                     const msg = ofResultColor(
                         replaceStr ? `${pathnameStr} -> ${replaceStr}` : `${pathnameStr}`,
                         ret,
                     );
                     logger.info({ tag: 'opendir' }, `${msg} ${addressOf(this.returnAddress)}`);
+                    return ret;
                 }
                 return ret ?? Libc.opendir(pathname);
             },
@@ -328,7 +331,7 @@ function hookDirent(predicate: (ptr: NativePointer) => boolean) {
                 const dirent = !isNully(retval)
                     ? Text.stringify(Struct.toObject(Struct.Dir.dirent(retval)))
                     : ptr(0x0);
-                logger.info({ tag: 'readdir' }, `${dirent}`);
+                logger.info({ tag: 'readdir' }, `${dirent} ${addressOf(this.returnAddress)}`);
             }
         },
     });
@@ -494,7 +497,7 @@ function hookReadlink(predicate: (ptr: NativePointer) => boolean) {
 }
 
 function hookFgets(predicate: (ptr: NativePointer) => boolean, fn?: (line: string) => string | undefined) {
-    const array: ('fgets' | 'fgets_unlocked')[] = ['fgets_unlocked'];
+    const array: ('fgets' | 'fgets_unlocked')[] = ['fgets', 'fgets_unlocked'];
     for (const key of array) {
         const func = Libc[key];
         function callback(buffer: NativePointer, size: number, fp: NativePointer) {
@@ -504,12 +507,11 @@ function hookFgets(predicate: (ptr: NativePointer) => boolean, fn?: (line: strin
                 const fd = Libc.fileno(fp).value;
                 const fdp = readFdPath(fd, 64);
                 if (fdp?.endsWith('/status') || fdp?.endsWith('/maps')) {
+                    logger.info({ tag: key }, `${fdp} ${red('SKIP')}`);
                     Libc.lseek(fd, NULL, 2);
                     return NULL;
                 }
                 const m = buffer.readCString()?.trimEnd();
-
-                // logger.info({ tag: key }, `${m}`);
             }
             return retval;
         }

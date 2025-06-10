@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { Std, tryNull, Text } from '@clockwork/common';
 import { logger, Color } from '@clockwork/logging';
 import { HooahTrace } from './hooah.js';
@@ -14,6 +15,7 @@ export * as System from './system.js';
 export * as TheEnd from './theEnd.js';
 export * as Time from './time.js';
 export * from './opengl.js';
+export * from './stalker.js';
 export {
     addressOf,
     dumpFile,
@@ -58,6 +60,24 @@ const predicate: (r: NativePointer) => boolean = (r: NativePointer) => {
     // ? there was some reason for this at some point ...
     return !true && Inject.modules.find(r) === null;
 };
+
+const isInRange = (module: { base: NativePointer; size: number }, ptr: NativePointer) =>
+    ptr && module && ptr >= module.base && module.base.add(module.size) > ptr;
+
+const bindInRange = (module: { base: NativePointer; size: number }) => isInRange.bind(null, module);
+
+function previousReturn(ctx: Arm64CpuContext, depth = 1): NativePointer {
+    const addr1 = ctx.lr;
+    try {
+        const fp = ctx.fp;
+        if (fp) {
+            const addr2 = fp.add(0x8 * depth).readPointer();
+            return addr2 ?? NULL;
+        }
+    } catch (e) {}
+
+    return NULL;
+}
 
 function hardBreakPoint(ptr: NativePointer, fn: () => void) {
     const prot = Memory.queryProtection(ptr);
@@ -157,8 +177,10 @@ type HookParamteres = {
     logcat?: boolean;
     base?: NativePointer;
     predicate?: (returnAddress: NativePointer) => boolean;
+    transform?: { [key: number]: (ptr: NativePointer) => string };
 };
 function log(ptr: NativePointer, argdef: string, params?: HookParamteres) {
+    const predicate: (r: NativePointer) => boolean = params?.predicate ? params.predicate : () => true;
     try {
         logger.info({ tag: 'log' }, `in: ${ptr} ${argdef}`);
         const resolved = DebugSymbol.fromAddress(ptr);
@@ -166,15 +188,18 @@ function log(ptr: NativePointer, argdef: string, params?: HookParamteres) {
         const tag = params?.tag ?? atag;
         const argSize = argdef.length;
         logger.info({ tag: 'log' }, `${resolved} ${tag}`);
-        Interceptor.attach(ptr, {
+        return Interceptor.attach(ptr, {
             onEnter(args) {
-                if (!params?.predicate?.(this.returnAddress) === false) return;
+                if (!predicate(this.returnAddress)) return;
                 if (params?.call !== false && params?.nolog !== true) {
                     let sb = '';
                     sb += '{ ';
                     for (let i = 0; i < argSize; i += 1) {
                         const value: any = args[i];
                         let strvalue = `${args[i]}`;
+                        if (argdef[i].match(/[0-9]/)) {
+                            strvalue = `${params?.transform?.[Number(argdef[i])]?.(value) ?? strvalue}`;
+                        }
                         switch (argdef[i]) {
                             case 'r':
                                 strvalue = `${value.sub(params?.base)} ${params?.base}`;
@@ -203,7 +228,7 @@ function log(ptr: NativePointer, argdef: string, params?: HookParamteres) {
                     }
                     sb += ' }';
                     sb += ` ${addressOf(this.returnAddress)}`;
-                    logger.info({ tag: resolved }, sb);
+                    logger.info({ tag: tag }, sb);
                 }
                 if (typeof params?.call === 'function') {
                     params?.call.call(this, args);
@@ -216,7 +241,7 @@ function log(ptr: NativePointer, argdef: string, params?: HookParamteres) {
                 }
             },
             onLeave(retval) {
-                if (!params?.predicate?.(this.returnAddress) === false) return;
+                if (!predicate(this.returnAddress)) return;
                 if (typeof params?.ret === 'function') {
                     params?.ret?.call(this, retval);
                 }
@@ -246,7 +271,7 @@ function replace<Ret extends NativeCallbackReturnType, Arg extends NativeCallbac
         retType,
         argTypes,
     );
-    Interceptor.replace(ptr, cb);
+    return Interceptor.replace(ptr, cb);
 }
 
 function prettyMethod(methodID: NativePointer, withSignature: boolean) {
@@ -282,5 +307,8 @@ export {
     log,
     memWatch,
     predicate,
+    isInRange,
+    bindInRange,
+    previousReturn,
     replace,
 };

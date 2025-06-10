@@ -1,3 +1,4 @@
+import type Java from 'frida-java-bridge';
 import { Classes, ClassesString, enumerateMembers, findClass } from '@clockwork/common';
 import { ClassLoader, hook } from '@clockwork/hooks';
 import type { MethodHookPredicate } from '@clockwork/hooks/dist/types';
@@ -54,6 +55,7 @@ function replace(details: ReferrerDetails = {}) {
 }
 
 function performReplace(details: ReferrerDetails, client: Java.Wrapper) {
+    let isFinished = false;
     const beforeInit = function (this: Java.Wrapper) {
         const paretnClass = findClass(this.$className);
         if (!paretnClass) {
@@ -83,6 +85,13 @@ function performReplace(details: ReferrerDetails, client: Java.Wrapper) {
                 msg += Color.method(onFinishedMethod);
                 msg += `${Color.bracket('(')}${Color.number('0')}${Color.bracket(')')}`;
                 logger.info(msg);
+
+                hook(listenerClass, onFinishedMethod, {
+                    replace(method, ...args) {
+                        if (isFinished) return;
+                        isFinished = true;
+                    },
+                });
 
                 listener?.[onFinishedMethod]?.(0);
             },

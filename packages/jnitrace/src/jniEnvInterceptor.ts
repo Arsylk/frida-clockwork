@@ -7,10 +7,14 @@ const UNION_SIZE = 8;
 
 abstract class JNIEnvInterceptor {
     #primitives = Reflect.ownKeys(JavaPrimitive);
-    envWrapper: () => EnvWrapper;
+    #envWrapper: () => EnvWrapper;
+
+    get envWrapper() {
+        return this.#envWrapper();
+    }
 
     constructor(envWrapper: () => EnvWrapper) {
-        this.envWrapper = envWrapper;
+        this.#envWrapper = envWrapper;
     }
 
     public getCallMethodArgs(
@@ -22,6 +26,7 @@ abstract class JNIEnvInterceptor {
         if (!method) return null;
 
         const isVaList = caller.endsWith('va_list') || caller.endsWith('V');
+        const isArray = caller.endsWith('A');
 
         const callArgs = Array(method.jParameterTypes.length);
         const callArgsPtr = args[args.length - 1] as NativePointer;
@@ -32,9 +37,12 @@ abstract class JNIEnvInterceptor {
             if (isVaList) {
                 const currentPtr = this.extractVaListArgValue(method, i);
                 callArgs[i] = this.readValue(currentPtr, type, true);
+            } else if (isArray) {
+                const ptr = callArgsPtr.add(0x8 * i).readPointer();
+                callArgs[i] = ptr;
             } else {
                 const ptr = callArgsPtr.add(UNION_SIZE * i);
-                callArgs[i] = this.readValue(ptr, type);
+                callArgs[i] = ptr;
             }
         }
 
@@ -56,8 +64,8 @@ abstract class JNIEnvInterceptor {
             return null;
         }
 
-        if (`${currentPtr}`.length !== 12 && !(type in this.#primitives)) {
-            return this.envWrapper().getLocalRef(currentPtr, (x) => x);
+        if (`${currentPtr}`.length !== 12 && !this.#primitives.includes(type)) {
+            return this.envWrapper.getLocalRef(currentPtr, (x) => x);
             // if (type in Reflect.ownKeys(JavaPrimitive)) {
             //     return 0;
             // }
@@ -66,34 +74,42 @@ abstract class JNIEnvInterceptor {
 
         let value: NativeCallbackArgumentValue;
         switch (type) {
+            case 'boolean':
             case JavaPrimitive.boolean: {
                 value = currentPtr.readU8();
                 break;
             }
+            case 'byte':
             case JavaPrimitive.byte: {
                 value = currentPtr.readS8();
                 break;
             }
+            case 'char':
             case JavaPrimitive.char: {
                 value = currentPtr.readU16();
                 break;
             }
+            case 'short':
             case JavaPrimitive.short: {
                 value = currentPtr.readS16();
                 break;
             }
+            case 'int':
             case JavaPrimitive.int: {
                 value = currentPtr.readS32();
                 break;
             }
+            case 'long':
             case JavaPrimitive.long: {
                 value = currentPtr.readS64();
                 break;
             }
+            case 'double':
             case JavaPrimitive.double: {
                 value = currentPtr.readDouble();
                 break;
             }
+            case 'float':
             case JavaPrimitive.float: {
                 value = extend === true ? currentPtr.readDouble() : currentPtr.readFloat();
                 break;

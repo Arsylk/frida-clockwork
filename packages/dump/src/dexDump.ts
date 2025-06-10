@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { tryNull, tryErr } from '@clockwork/common';
 import { subLogger } from '@clockwork/logging';
 import { getSelfFiles, mkdir } from '@clockwork/native';

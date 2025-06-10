@@ -7,52 +7,37 @@ class JNIEnvInterceptorARM64 extends JNIEnvInterceptor {
     private grTop: NativePointer = NULL;
     private vrTop: NativePointer = NULL;
     private grOffs = 0;
-    private grOffsIndex = 0;
     private vrOffs = 0;
-    private vrOffsIndex = 0;
 
     protected setUpVaListArgExtract(vaList: NativePointer): void {
-        const vrStart = 2;
-        const grOffset = 3;
-        const vrOffset = 4;
         this.stack = vaList.readPointer();
         this.stackIndex = 0;
-        this.grTop = vaList.add(Process.pointerSize).readPointer();
-        this.vrTop = vaList.add(Process.pointerSize * vrStart).readPointer();
-        this.grOffs = vaList.add(Process.pointerSize * grOffset).readS32();
-        this.grOffsIndex = 0;
-        this.vrOffs = vaList.add(Process.pointerSize * grOffset + vrOffset).readS32();
-        this.vrOffsIndex = 0;
+        this.grTop = vaList.add(8).readPointer();
+        this.vrTop = vaList.add(16).readPointer();
+        this.grOffs = vaList.add(24).readS32();
+        this.vrOffs = vaList.add(28).readS32();
     }
 
     protected extractVaListArgValue(method: JavaMethod, paramId: number): NativePointer {
-        const MAX_VR_REG_NUM = 8;
-        const VR_REG_SIZE = 2;
-        const MAX_GR_REG_NUM = 4;
         let currentPtr = NULL;
 
         if (method.jParameterTypes[paramId] === 'float' || method.jParameterTypes[paramId] === 'double') {
-            if (this.vrOffsIndex < MAX_VR_REG_NUM) {
-                currentPtr = this.vrTop
-                    .add(this.vrOffs)
-                    .add(this.vrOffsIndex * Process.pointerSize * VR_REG_SIZE);
-
-                this.vrOffsIndex++;
+            if (this.vrOffs < 0) {
+                currentPtr = this.vrTop.add(this.vrOffs);
+                this.vrOffs += 16; // Move to next VR register
             } else {
-                currentPtr = this.stack.add(this.stackIndex * Process.pointerSize);
+                currentPtr = this.stack.add(this.stackIndex * 8);
                 this.stackIndex++;
             }
         } else {
-            if (this.grOffsIndex < MAX_GR_REG_NUM) {
-                currentPtr = this.grTop.add(this.grOffs).add(this.grOffsIndex * Process.pointerSize);
-
-                this.grOffsIndex++;
+            if (this.grOffs < 0) {
+                currentPtr = this.grTop.add(this.grOffs);
+                this.grOffs += 8; // Move to next GR register
             } else {
-                currentPtr = this.stack.add(this.stackIndex * Process.pointerSize);
+                currentPtr = this.stack.add(this.stackIndex * 8);
                 this.stackIndex++;
             }
         }
-
         return currentPtr;
     }
 
@@ -62,9 +47,7 @@ class JNIEnvInterceptorARM64 extends JNIEnvInterceptor {
         this.grTop = NULL;
         this.vrTop = NULL;
         this.grOffs = 0;
-        this.grOffsIndex = 0;
         this.vrOffs = 0;
-        this.vrOffsIndex = 0;
     }
 }
 

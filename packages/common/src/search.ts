@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { logger } from '@clockwork/logging';
 
 type BaseJavaWrapper<T extends Java.Members<T>> = Java.Wrapper<T>;

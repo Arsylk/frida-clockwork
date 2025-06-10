@@ -1,3 +1,4 @@
+import type Java from 'frida-java-bridge';
 import type {
     FridaMethodReplacement,
     FridaMethodReplacementOptional,

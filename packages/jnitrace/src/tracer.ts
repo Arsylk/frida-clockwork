@@ -1,4 +1,5 @@
-import { Classes, ClassesString, enumerateMembers, findClass } from '@clockwork/common';
+import Java from 'frida-java-bridge';
+import { Classes, ClassesString, enumerateMembers, findClass, isNully } from '@clockwork/common';
 import { asFunction } from './envWrapper.js';
 import { JNI, type jMethodID, type jclass } from './jni.js';
 import { JavaMethod } from './model.js';
@@ -17,10 +18,6 @@ const Cache = {
     },
 };
 
-const cachedBase: NativePointer | null = null;
-let FindClass: NativeFunction<any, any> | null = null;
-let ToReflectedMethod: any = null;
-let getDeclaringClassDesc: NativeFunction<any, any> | null = null;
 const PrimitiveTypes: { [key: string]: string } = {
     Z: 'boolean',
     B: 'byte',
@@ -39,97 +36,96 @@ function resolveMethod(
     methodID: jMethodID,
     isStatic: boolean,
 ): JavaMethod | null {
-    const method = Cache.get(methodID, isStatic);
-    if (method) return method;
+    const resolved = Cache.get(methodID, isStatic);
+    if (resolved) return resolved;
 
-    // fallback to frida getEnv()
-    env ??= Java.vm.tryGetEnv()?.handle;
-    if (!env) return null;
+    if (isNully(env) || isNully(clazz) || isNully(methodID)) return null;
 
-    if (FindClass === null && env) FindClass = asFunction(env, JNI.FindClass);
-    if (ToReflectedMethod === null && env) ToReflectedMethod = asFunction(env, JNI.ToReflectedMethod);
+    const ToReflectedMethod = asFunction(env, JNI.ToReflectedMethod);
+    let jniMethod: NativePointer;
+    try {
+        jniMethod = ToReflectedMethod(env, clazz, methodID, isStatic ? 1 : 0);
+    } catch (e) {
+        jniMethod = ToReflectedMethod(env, clazz, methodID, isStatic ? 1 : 0);
+    }
+    const javaExecutable = Java.cast(jniMethod, Classes.Executable);
 
-    if (ToReflectedMethod) {
-        const jniMethod = ToReflectedMethod(env, clazz, methodID, isStatic ? 1 : 0);
-        const javaExecutable = Java.cast(jniMethod, Classes.Executable);
+    let name: string = javaExecutable.getName();
+    const declaringClass: Java.Wrapper = javaExecutable.getDeclaringClass();
+    const parameterTypes: Java.Wrapper[] = javaExecutable.getParameterTypes();
+    const declaringClassType: string = declaringClass.getTypeName();
 
-        let name: string = javaExecutable.getName();
-        const declaringClass: Java.Wrapper = javaExecutable.getDeclaringClass();
-        const parameterTypes: Java.Wrapper[] = javaExecutable.getParameterTypes();
-        const declaringClassType: string = declaringClass.getTypeName();
-
-        let returnTypeName = 'void';
-        if (javaExecutable.$className === ClassesString.Method) {
-            const javaMethod = Java.cast(javaExecutable, Classes.Method);
-            const returnType = javaMethod.getReturnType();
-            returnTypeName = returnType.getTypeName();
-            returnType.$dispose();
-        } else if (javaExecutable.$className === ClassesString.Constructor) {
-            name = '<init>';
-            returnTypeName = declaringClassType;
-        }
-
-        const method = new JavaMethod(
-            declaringClassType,
-            name,
-            parameterTypes.map((x) => x.getTypeName()),
-            returnTypeName,
-            isStatic,
-        );
-
-        declaringClass.$dispose();
-        for (const parameterType of parameterTypes) {
-            parameterType.$dispose();
-        }
-
-        return Cache.set(methodID, method);
+    let returnTypeName = 'void';
+    if (javaExecutable.$className === ClassesString.Method) {
+        const javaMethod = Java.cast(javaExecutable, Classes.Method);
+        const returnType = javaMethod.getReturnType();
+        returnTypeName = returnType.getTypeName();
+        returnType.$dispose();
+    } else if (javaExecutable.$className === ClassesString.Constructor) {
+        name = '<init>';
+        returnTypeName = declaringClassType;
     }
 
-    if (getDeclaringClassDesc === null) {
-        // const getDeclaringClassDescSym = Process.getModuleByName('libart.so')
-        //     .enumerateSymbols()
-        //     .filter((x) => x.name.includes('DeclaringClassDesc'))[0];
-        const getDeclaringClassDescSym = new ApiResolver('module')?.enumerateMatches(
-            'exports:libart.so!*DeclaringClassDesc*',
-        )?.[0];
-        if (!getDeclaringClassDescSym) return null;
-        getDeclaringClassDesc = new NativeFunction(getDeclaringClassDescSym.address, 'pointer', ['pointer'], {
-            exceptions: 'propagate',
-        });
-    }
+    const method = new JavaMethod(
+        declaringClassType,
+        name,
+        parameterTypes.map((x) => x.getTypeName()),
+        returnTypeName,
+        isStatic,
+    );
 
-    const thisSigPtr: NativePointer = getDeclaringClassDesc(methodID);
-    let thisSig = thisSigPtr.readCString();
-    thisSig =
-        thisSig?.startsWith('L') && thisSig.endsWith(';')
-            ? thisSig.substring(1, thisSig.length - 1)
-            : thisSig;
-    thisSig = thisSig?.replaceAll('/', '.') ?? thisSig;
-    const cls = thisSig ? findClass(thisSig) : null;
-    if (!thisSig || !cls) return null;
+    // declaringClass.$dispose();
+    // for (const parameterType of parameterTypes) {
+    //     parameterType.$dispose();
+    // }
 
-    let matched: Java.Method | null = null;
-    enumerateMembers(cls, {
-        onMatchMethod(clazz, member) {
-            const method: Java.MethodDispatcher = clazz[member];
-            for (const overload of method.overloads) {
-                if (`${overload.handle}` === `${methodID}`) {
-                    matched = overload;
-                    return Cache.set(
-                        methodID,
-                        new JavaMethod(
-                            thisSig ?? '',
-                            member,
-                            overload.argumentTypes.map((x) => x.className ?? x.name),
-                            overload.returnType.className ?? overload.returnType.name,
-                            isStatic,
-                        ),
-                    );
-                }
-            }
-        },
-    });
-    return null;
+    return Cache.set(methodID, method);
+
+    // if (getDeclaringClassDesc === null) {
+    //     // const getDeclaringClassDescSym = Process.getModuleByName('libart.so')
+    //     //     .enumerateSymbols()
+    //     //     .filter((x) => x.name.includes('DeclaringClassDesc'))[0];
+    //     const getDeclaringClassDescSym = new ApiResolver('module')?.enumerateMatches(
+    //         'exports:libart.so!*DeclaringClassDesc*',
+    //     )?.[0];
+    //     if (!getDeclaringClassDescSym) return null;
+    //     getDeclaringClassDesc = new NativeFunction(getDeclaringClassDescSym.address, 'pointer', ['pointer'], {
+    //         exceptions: 'propagate',
+    //     });
+    // }
+    //
+    // const thisSigPtr: NativePointer = getDeclaringClassDesc(methodID);
+    // let thisSig = thisSigPtr.readCString();
+    // thisSig =
+    //     thisSig?.startsWith('L') && thisSig.endsWith(';')
+    //         ? thisSig.substring(1, thisSig.length - 1)
+    //         : thisSig;
+    // thisSig = thisSig?.replaceAll('/', '.') ?? thisSig;
+    // const cls = thisSig ? findClass(thisSig) : null;
+    // if (!thisSig || !cls) return null;
+    //
+    // let matched: Java.Method | null = null;
+    // enumerateMembers(cls, {
+    //     onMatchMethod(clazz, member) {
+    //         const method: Java.MethodDispatcher = clazz[member];
+    //         for (const overload of method.overloads) {
+    //             if (`${overload.handle}` === `${methodID}`) {
+    //                 matched = overload;
+    //                 return Cache.set(
+    //                     methodID,
+    //                     new JavaMethod(
+    //                         thisSig ?? '',
+    //                         member,
+    //                         overload.argumentTypes.map((x) => x.className ?? x.name),
+    //                         overload.returnType.className ?? overload.returnType.name,
+    //                         isStatic,
+    //                     ),
+    //                 );
+    //             }
+    //         }
+    //     },
+    // });
+    // return null;
 }
 
 function signatureToPrettyTypes(sig: string) {

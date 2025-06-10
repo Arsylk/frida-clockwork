@@ -1,3 +1,4 @@
+import type Java from 'frida-java-bridge';
 import type { JavaArgument } from '@clockwork/common';
 import type { ReturnOptional } from '@clockwork/common/src/types';
 

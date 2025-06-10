@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+typedef unsigned long long u64;
 
 extern void frida_log(void *str);
 static void mklog(const char *format, ...) {
@@ -51,6 +52,11 @@ typedef struct {
   size_t capacity;
 } mem_list;
 
+typedef struct {
+  u64 base;
+  u64 size;
+} mem_range;
+
 mem_list new_mem_list() {
   const size_t initial_capacity = 3200;
   mem_list list;
@@ -68,7 +74,6 @@ void mem_list_add(mem_list list, mem_info *element) {
   list.data[list.size += 1] = *element;
 };
 
-// Free the variable-sized list
 void mem_list_free(mem_list *list) {
   if (list) {
     g_free(list->data);
@@ -85,10 +90,13 @@ typedef struct {
 #define MAX_FRAMES 32
 #define LOG_TAG "FridaBacktracer"
 
+extern void *getranges();
 extern char *__cxa_demangle(const char *__mangled_name, char *__output_buffer,
                             size_t *__length, int *__status);
 extern char *dl_soinfo_get_soname(so_info *info);
 extern so_info *dl_solist_get_head();
+extern int sprintf(char *str, const char *format, ...);
+extern int isprint(int ch);
 extern int close(int fd);
 extern int fclose(FILE *stream);
 extern FILE *fdopen(int fildes, const char *options);
@@ -138,7 +146,7 @@ static mem_list *read_proc_maps() {
 
   char *token, *saveptr;
   mem_list list = new_mem_list();
-  while (fgets(line, 512, fp) != NULL) {
+  while (fgets(line, 0x400, fp) != NULL) {
     token = strtok_r(line, "-", &saveptr);
     start = (uint64_t)strtoul(token, NULL, 16);
 
@@ -156,6 +164,7 @@ static mem_list *read_proc_maps() {
     char *nameptr = strchr(saveptr, '/');
     if (nameptr != NULL) {
       strcpy(mem.name, nameptr);
+      mem.name[strlen(nameptr)] = 0;
     }
   }
 
@@ -191,7 +200,7 @@ void backtrace_v0() {
       (uint64_t)__builtin_extract_return_addr(__builtin_return_address(0));
   uintptr_t *frame_ptr = (uintptr_t *)__builtin_frame_address(0);
 
-  /*mem_list *mem_list = read_proc_maps();*/
+  mem_list *mem_list = read_proc_maps();
   int depth = 0;
   while (frame_ptr != NULL && depth < 10) {
     void *return_addr = (void *)*(frame_ptr + 1);
@@ -199,7 +208,7 @@ void backtrace_v0() {
       break;
 
     lib_info *lib = find_lib_info(return_addr);
-    /*mem_info *mem = find_mem_info(mem_list, return_addr);*/
+    mem_info *mem = find_mem_info(mem_list, return_addr);
     dl_info *dl = find_dl_info(return_addr);
 
     frame_ptr = (uintptr_t *)*frame_ptr;
@@ -210,7 +219,7 @@ void backtrace_v0() {
 
     depth += 1;
   }
-  /*mem_list_free(mem_list);*/
+  mem_list_free(mem_list);
 }
 
 // init functios
@@ -222,20 +231,57 @@ void finalize(void) {}
 char *get_backtrace(void *addr) {
   lib_info *lib = find_lib_info(addr);
   if (lib) {
-    mklog("%p %s", lib, lib->name);
+    return g_strdup_printf("%p %s", lib, lib->name);
   }
   dl_info *dl = find_dl_info(addr);
   if (dl) {
-    mklog("%s %s 0x%x 0x%x", dl->dli_fname, dl->dli_sname, dl->dli_fbase,
-          dl->dli_saddr);
+    return g_strdup_printf("%s %s 0x%x 0x%x", dl->dli_fname, dl->dli_sname,
+                           dl->dli_fbase, dl->dli_saddr);
   }
   mem_list *list = (mem_list *)read_proc_maps();
   mem_info *mem = find_mem_info(list, addr);
   if (mem) {
-    mklog("0x%x-0x%x %s %s", mem->start, mem->end, mem->mode, mem->name);
+    mem_list_free(list);
+    return g_strdup_printf("0x%x-0x%x %s %s", mem->start, mem->end, mem->mode,
+                           mem->name);
   }
   mem_list_free(list);
   return "v0";
+}
+
+void hex_dump(const void *ptr, size_t x) {
+  const unsigned char *p = ptr;
+  size_t i, j;
+  char line[100];
+
+  // mklog("Offset    | 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F |
+  // ASCII");
+  for (i = 0; i < x; i += 16) {
+    char *pos = line;
+    pos += sprintf(pos, "0x%08zx | ", i);
+
+    for (j = 0; j < 16; j++) {
+      if (i + j < x)
+        pos += sprintf(pos, "%02x ", p[i + j]);
+      else
+        pos += sprintf(pos, "   ");
+    }
+
+    pos += sprintf(pos, "| ");
+    for (j = 0; j < 16; j++) {
+      if (i + j < x) {
+        unsigned char c = p[i + j];
+        pos += sprintf(pos, "%c", isprint(c) ? c : '.');
+      } else {
+        pos += sprintf(pos, " ");
+      }
+    }
+
+    mklog("%s", line);
+  }
+
+  mklog("-----------+-------------------------------------------------+--------"
+        "---------");
 }
 
 char *addressOf(void *addr) {
@@ -272,4 +318,23 @@ int8_t isFridaAddress(void *addr) {
       return 1;
   }
   return 0;
+}
+
+gboolean inRange(void *ptr) {
+  struct {
+    size_t size;
+  } *var = getranges();
+  if (!var->size)
+    return FALSE;
+
+  int isize = (int)var->size;
+  for (int i = 0; i < isize; i += 1) {
+    mem_range *item = (mem_range *)((u64)var + (u64)4 + (u64)(16 * i));
+    u64 base = (u64)item->base;
+    u64 size = (u64)item->size;
+    if (base <= (u64)ptr && base + size >= (u64)ptr) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }

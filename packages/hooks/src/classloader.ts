@@ -1,9 +1,12 @@
+import Java from 'frida-java-bridge';
 import { Classes } from '@clockwork/common';
 import { hook } from './hook.js';
 
 type Listener = (classLoader: Java.Wrapper | null) => void;
 
 namespace ClassLoader {
+    export let autorun = true;
+
     const listeners: Listener[] = [];
     export function perform(fn: Listener) {
         listeners.push(fn);
@@ -22,22 +25,22 @@ namespace ClassLoader {
             after: onNewClassLoader,
             logging: { arguments: false, call: false },
         });
-        hook(Classes.BaseDexClassLoader, '$init', {
-            after: onNewClassLoader,
-            logging: { arguments: false },
-        });
-        hook(Classes.DexClassLoader, '$init', {
-            after: onNewClassLoader,
-            logging: { arguments: false },
-        });
-        hook(Classes.InMemoryDexClassLoader, '$init', {
-            after: onNewClassLoader,
-            logging: { arguments: false },
-        });
-        hook(Classes.PathClassLoader, '$init', {
-            after: onNewClassLoader,
-            logging: { arguments: false },
-        });
+        // hook(Classes.BaseDexClassLoader, '$init', {
+        //     after: onNewClassLoader,
+        //     logging: { arguments: false },
+        // });
+        // hook(Classes.DexClassLoader, '$init', {
+        //     after: onNewClassLoader,
+        //     logging: { arguments: false },
+        // });
+        // hook(Classes.InMemoryDexClassLoader, '$init', {
+        //     after: onNewClassLoader,
+        //     logging: { arguments: false },
+        // });
+        // hook(Classes.PathClassLoader, '$init', {
+        //     after: onNewClassLoader,
+        //     logging: { arguments: false },
+        // });
 
         hook(Classes.Application, 'onCreate', {
             before() {
@@ -49,7 +52,7 @@ namespace ClassLoader {
         notify(null);
     }
 
-    setImmediate(() => Java.performNow(invoke));
+    autorun && setImmediate(() => Java.performNow(invoke));
 }
 
 export { ClassLoader };

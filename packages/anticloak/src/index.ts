@@ -2,6 +2,7 @@ import { Classes, Text, enumerateMembers, getFindUnique } from '@clockwork/commo
 import { ClassLoader, Filter, always, hook, ifKey } from '@clockwork/hooks';
 import type { HookParameters } from '@clockwork/hooks/dist/types.js';
 import { buildMapper } from './buildprop.js';
+export * as HideMaps from './hidemaps.js';
 
 export * as BuildProp from './buildprop.js';
 export * as Country from './country.js';
@@ -115,6 +116,23 @@ function hookHasFeature() {
     });
 }
 
+function hookBatteryManager() {
+    hook(Classes.BatteryManager, 'isCharging', {
+        replace: always(false),
+        logging: { short: true, multiline: false },
+    });
+
+    hook(Classes.BatteryManager, 'getIntProperty', {
+        replace: ifKey((key) => {
+            switch (`${key}`) {
+                case '4': // battery level
+                    return 73;
+            }
+        }),
+        logging: { short: true, multiline: false },
+    });
+}
+
 function hookWindowFlags() {
     hook(Classes.Window, 'setFlags', {
         replace(method, ...args) {
@@ -126,13 +144,30 @@ function hookWindowFlags() {
     });
 }
 
+function hookNetwork() {
+    hook(Classes.NetworkInfo, 'getState', {
+        replace: () => {
+            //@ts-ignore
+            return Classes.NetworkInfo$State.valueOf('CONNECTED');
+        },
+    });
+    hook(Classes.NetworkInfo, 'isAvailable', { replace: always(true) });
+    hook(Classes.NetworkInfo, 'isConnected', { replace: always(true) });
+    hook(Classes.NetworkInfo, 'isConnectedOrConnecting', { replace: always(true) });
+    hook(Classes.TelephonyManager, 'getSimState', {
+        replace: always(5),
+        logging: { multiline: false, short: true },
+    });
+}
+
 function generic() {
     hookInstallerPackage();
     hookLocationHardware();
     hookSensor();
     hookVerify();
     hookHasFeature();
+    hookBatteryManager();
     hookWindowFlags();
 }
 
-export { generic, hookAdId, hookDevice, hookInstallerPackage, hookSettings };
+export { generic, hookAdId, hookDevice, hookNetwork, hookInstallerPackage, hookBatteryManager, hookSettings };

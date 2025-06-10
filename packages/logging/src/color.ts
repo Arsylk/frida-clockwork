@@ -1,7 +1,9 @@
 import { createColors } from 'colorette';
-const Colors = Object.assign(createColors({ useColor: true }), {
-    orange: (text: string | number) => `\x1b[38;2;250;179;135m${text}\x1b[39m`,
-    lavender: (text: string | number) => `\x1b[38;2;180;190;254m${text}\x1b[39m`,
+
+const enable = true;
+const Colors = Object.assign(createColors({ useColor: enable }), {
+    orange: (text: string | number) => (enable ? `\x1b[38;2;250;179;135m${text}\x1b[39m` : `${text}`),
+    lavender: (text: string | number) => (enable ? `\x1b[38;2;180;190;254m${text}\x1b[39m` : `${text}`),
 });
 const { cyan, green, gray, blue, underline, yellow, magenta, orange } = use();
 
@@ -50,7 +52,7 @@ const string: (string: any) => string = (string: any) => {
 };
 
 const char: (char: any) => string = (char: any) => {
-    return yellow(`'${string}'`);
+    return yellow(`'${`${char}`.replace('\n', '\\\n').replace('\r', '\\\r')}'`);
 };
 
 const number: (number: any) => string = (number: any) => {

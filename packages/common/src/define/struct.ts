@@ -116,15 +116,26 @@ const Elf = {
         array_0x28: 'pointer',
     }),
 };
+6;
 
 const Linker = {
     soinfo: proxyStruct({
-        phdr: 'pointer',
-        phnum: 'uint64',
+        phdr: 'string*',
+        phnum: 'pointer',
         base: 'pointer',
         size: 'uint64',
         dynamic: 'pointer',
         next: 'pointer',
+    }),
+    dl_phdr_info: proxyStruct({
+        dlpi_addr: 'pointer',
+        dlpi_name: 'string*',
+        dlpi_phdr: 'pointer',
+        dlpi_phnum: 'short',
+        dlpi_adds: 'uint64',
+        dlpi_subs: 'uint64',
+        dlpi_tls_modid: 'int',
+        dlpi_tls_data: 'pointer',
     }),
 };
 

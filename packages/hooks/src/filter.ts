@@ -1,3 +1,4 @@
+import type Java from 'frida-java-bridge';
 import { ClassesString, stacktrace } from '@clockwork/common';
 
 const prefsMeasurementInternalIgnored = [
@@ -115,12 +116,7 @@ const Filter = {
         if (trace.includes('at com.applovin.sdk.AppLovinInitProvider.onCreate')) return false;
         if (trace.includes('at com.google.firebase.provider.FirebaseInitProvider.onCreate')) return false;
         if (trace.includes('at com.google.firebase.crashlytics.CrashlyticsRegistrar')) return false;
-        if (
-            trace.includes('at com.facebook.appevents.internal.') &&
-            trace.includes('at android.icu.util.Currency.getAvailableCurrencyCodes')
-        )
-            return false;
-
+        if (trace.includes('at android.icu.util.Currency.getAvailableCurrencyCodes')) return false;
         // console.log(trace)
 
         return true;
@@ -133,6 +129,7 @@ const Filter = {
         const key = `${args[0]}`;
         switch (key) {
             case 'persist.sys.fflag.override.settings_auto_text_wrapping':
+            case 'debug.layout':
             case 'debug.force_rtl':
             case 'ro.build.version.sdk':
                 return false;

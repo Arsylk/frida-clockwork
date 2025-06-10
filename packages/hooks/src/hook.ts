@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { type JavaArgument, findClass, isJWrapper } from '@clockwork/common';
 import { logger } from '@clockwork/logging';
 import { Ids } from './ids.js';

@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { getHookUnique } from '@clockwork/hooks';
 import { ClassesString, findClass } from '@clockwork/common';
 import { always } from '@clockwork/hooks/dist/addons.js';

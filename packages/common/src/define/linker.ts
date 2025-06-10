@@ -1,14 +1,15 @@
 import { Color, logger, subLogger } from '@clockwork/logging';
-import { Libc } from '../index.js';
+import { Libc, tryNull } from '../index.js';
+import { isNully } from '../index.js';
 import { stringify } from '../text.js';
 import { Linker as LinkerStruct } from './struct.js';
-import { isNully } from '../index.js';
 import { SYSCALLS } from './syscalls.js';
 const { soinfo } = LinkerStruct;
 const { red, gray, dim } = Color.use();
 
 let _dl_solist_get_head = NULL;
 let soinfo_get_soname = NULL;
+let soinfo_get_realpath = NULL;
 
 const linker = Process.getModuleByName('linker64');
 const syms = linker.enumerateSymbols();
@@ -22,7 +23,14 @@ for (const i in syms) {
         case '__dl__ZNK6soinfo10get_sonameEv':
             soinfo_get_soname = sym.address;
             break;
+        case '__dl__ZNK6soinfo12get_realpathEv':
+            soinfo_get_realpath = sym.address;
+            break;
     }
+}
+
+if (`${soinfo_get_soname}` === '0x0') {
+    soinfo_get_soname = new NativeCallback((ptr: NativePointer) => ptr.readPointer(), 'pointer', ['pointer']);
 }
 
 namespace Linker {
@@ -51,7 +59,8 @@ namespace Linker {
         while (item) {
             const name = item.getName();
             const next = item.getNext();
-            if (_predicate(name) && predicate?.(name) !== false) {
+            // logger.info({ tag: name }, `${next}`);
+            if (_predicate(name) || predicate?.(name) === true) {
                 prev?.setNext(next);
                 skip.push(name);
             }
@@ -71,9 +80,9 @@ namespace Linker {
     }
 
     export function getParsedList() {
-        const list: { name: string; base: NativePointer }[] = [];
+        const list: { name: string; base: NativePointer; size: number }[] = [];
         for (let item = getSoListHead() as SoInfo | null; item; item = item.getNext()) {
-            list.push({ name: item.getName(), base: item.getBase() });
+            list.push({ name: item.getName(), base: item.getBase(), size: item.getSize() });
         }
         return list;
     }
@@ -81,7 +90,11 @@ namespace Linker {
 
 class SoInfo {
     static #getSoName = new NativeFunction(soinfo_get_soname, 'pointer', ['pointer']);
+    static #getRealpath = new NativeFunction(soinfo_get_realpath, 'pointer', ['pointer']);
 
+    get ptr(): NativePointer {
+        return this.#struct.ptr;
+    }
     #struct: ReturnType<typeof soinfo>;
     constructor(ptr: NativePointer) {
         this.#struct = soinfo(ptr);
@@ -100,7 +113,12 @@ class SoInfo {
     }
 
     getName(): string {
-        const ptr = SoInfo.#getSoName(this.#struct.ptr);
+        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
+        return `${ptr.readCString()}`;
+    }
+
+    getRealpath(): string {
+        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
         return `${ptr.readCString()}`;
     }
 
@@ -213,6 +231,7 @@ extern char *strchr(const char * str, int z);
 extern int open(const char * path, int flags);
 extern FILE *fopen(const char * restrict path, const char * restrict mode);
 extern FILE *fdopen(int fildes, const char *options);
+extern int close(int fd);
 extern int fclose(FILE *stream);
 extern int sprintf(char *str, const char *format, ...);
 extern char *fgets(char *str, int n, FILE *stream);
@@ -387,12 +406,12 @@ void *enqueue_task(thread_syscall_t *syscall_thread,void *args,int type){
         syscall_thread->type = type;
         syscall_thread->isTask = 1;
     }
-    do{
+    while(1){
         if(syscall_thread->isReturn){
             syscall_thread->isReturn = 0;
             return syscall_thread->ret;
         }
-    }while(1);
+    }
 }
 
 struct seccomp_data {
@@ -454,6 +473,7 @@ int install_filter(__u32 nr) {
         fdopen: Libc.fdopen,
         fgets: Libc.fgets,
         fclose: Libc.fclose,
+        close: Libc.close,
         sprintf: Libc.sprintf,
         strlen: Libc.strlen,
         strchr: Libc.strchr,
@@ -477,11 +497,19 @@ const CM_print_stacktrace = new NativeFunction(cm.print_stacktrace, 'void', []);
 const CM_find_so_info = new NativeFunction(cm.find_so_info, 'pointer', ['pointer']);
 
 let sysThread = NULL;
+
+type SyscallContext = {
+    readonly rawargs: NativePointer;
+    redo_call: () => void;
+    [key: string]: any;
+};
 type SyscallParams = {
-    onBefore?: (context: Arm64CpuContext, num: number) => void;
-    onAfter?: (context: Arm64CpuContext, num: number) => void;
+    logging?: true;
+    onBefore?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
+    onAfter?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
 };
 function hookException(nums: number[], params: SyscallParams) {
+    const rawargs = Memory.alloc(7 * Process.pointerSize);
     sysThread = CM_pthread_syscall_create();
     Process.setExceptionHandler((details) => {
         const offset = details.context.pc.sub(0x4);
@@ -494,18 +522,26 @@ function hookException(nums: number[], params: SyscallParams) {
             const num = (details.context as Arm64CpuContext).x8.toInt32();
             // store current registers
             const args: NativePointer[] = new Array(6);
-            const rawargs = Memory.alloc(7 * Process.pointerSize);
             rawargs.writePointer((details.context as Arm64CpuContext).x8);
             for (let i = 0; i < 6; i += 1) {
                 args[i] = Reflect.get(details.context, `x${i}`);
                 rawargs.add((i + 1) * Process.pointerSize).writePointer(args[i]);
             }
-            logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
+            params.logging && logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
 
-            params.onBefore?.(details.context as Arm64CpuContext, num);
+            const thisCtx = {
+                get rawargs() {
+                    return rawargs;
+                },
+                redo_call: () => {
+                    const retval = CM_enqueue_task(sysThread, rawargs, 0);
+                    (details.context as Arm64CpuContext).x0 = retval;
+                },
+            };
+            params.onBefore?.call(thisCtx, details.context as Arm64CpuContext, num);
             const retval = CM_enqueue_task(sysThread, rawargs, 0);
             (details.context as Arm64CpuContext).x0 = retval;
-            params?.onAfter?.(details.context as Arm64CpuContext, num);
+            params?.onAfter?.call(thisCtx, details.context as Arm64CpuContext, num);
 
             CM_unlock(sysThread);
             return true;

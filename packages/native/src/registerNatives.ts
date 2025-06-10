@@ -1,3 +1,4 @@
+import Java from 'frida-java-bridge';
 import { Color, logger } from '@clockwork/logging';
 const { green, redBright, bold, dim, black } = Color.use();
 

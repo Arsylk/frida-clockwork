@@ -9,22 +9,23 @@ const GL_ENUM = {
 };
 
 function hookGlGetString() {
-    Interceptor.attach(Module.getExportByName(null, 'glGetString'), {
+    Interceptor.attach(Module.getGlobalExportByName('glGetString'), {
         onEnter(args: any) {
             this.name = args[0];
         },
         onLeave(retval) {
             const name = this.name.toInt32();
             const label = GL_ENUM[name] ?? 'UNKNOWN';
+            const value = retval.readCString();
+            let mvalue = value ?? '';
             if (label === 'GL_VENDOR' || label === 'GL_RENDERER' || label === 'GL_EXTENSIONS') {
-                const value = retval.readCString();
-                const newvalue = value?.replace(
+                mvalue = mvalue.replace(
                     /x86|sdk|open|source|emulator|google|aosp|apple|ranchu|goldfish|cuttlefish|generic|unknown|android_emu/gi,
                     'nya',
                 );
-                retval.writeUtf8String(newvalue ?? '');
+                if (mvalue !== value) retval.replace(Memory.allocUtf8String(mvalue));
             }
-            logger.info({ tag: 'opengl' }, `${label}(${dim(`${this.name}`)}) -> ${retval.readCString()}`);
+            logger.info({ tag: 'opengl' }, `${label}(${dim(`${name}`)}) -> ${mvalue}`);
         },
     });
 }

@@ -4,6 +4,7 @@ import { LibcFinderProxy, type LibcType } from './define/libc.js';
 import { Linker, hookException } from './define/linker.js';
 import { enumerateMembers, findChoose, findClass, getFindUnique } from './search.js';
 import { SYSCALLS } from './define/syscalls.js';
+import type Java from 'frida-java-bridge';
 export { SYSCALLS as Syscalls };
 export * as Consts from './define/consts.js';
 export * as Std from './define/std.js';
@@ -69,7 +70,7 @@ declare global {
     // biome-ignore lint/suspicious/noRedeclare: Makes the function accessible from global frida context
     function findClass(className: string, ...loaders: Java.Wrapper[]): Java.Wrapper | null;
 }
-Object.defineProperties(global, {
+Object.defineProperties(globalThis, {
     Linker: {
         value: Linker,
         writable: false,
@@ -100,6 +101,7 @@ export {
     emitter,
     enumerateMembers,
     findClass,
+    findChoose,
     getApplicationContext,
     getFindUnique,
     isJWrapper,
