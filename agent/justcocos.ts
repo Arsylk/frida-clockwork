@@ -1,51 +1,66 @@
-import * as JniTrace from '@clockwork/jnitrace';
-import { Text } from '@clockwork/common';
-import { log, stalk } from '@clockwork/native';
-import { logger } from '@clockwork/logging';
+
+import { ClassLoader, Filter, always, compat, getHookUnique, hook, ifKey } from '@clockwork/hooks';
+import { ProcMaps } from '@clockwork/cmodules';
 import Java from 'frida-java-bridge';
-Java.deoptimizeEverything();
+import * as Native from '@clockwork/native';
+import * as Network from '@clockwork/network';
+import * as Anticloak from '@clockwork/anticloak';
+import * as JniTrace from '@clockwork/jnitrace';
 
-const isInRange = (module: { base: NativePointer; size: number }, ptr: NativePointer) =>
-    ptr && module && ptr >= module.base && module.base.add(module.size) > ptr;
-const ownRanges: { base: NativePointer; size: number }[] = [];
+JniTrace.attach((x) => ProcMaps.inRange(x.returnAddress), true);
+Network.injectSsl();
+Network.injectCurl();
 Process.attachModuleObserver({
-    onAdded(module: Module) {
-        const { name, base, size, path } = module;
-        if (
-            (path.startsWith('/data/app/') || path.startsWith('/data/data/')) &&
-            !path.includes('/com.google.android.trichromelibrary') &&
-            !path.includes('libconscrypt_gmscore_jni.so') &&
-            !path.includes('(deleted)') &&
-            !path.includes('libd7B2A6FE44B27.so')
-        ) {
-            logger.info(
-                {
-                    tag: 'phdr_push',
-                },
-                `${Text.stringify({ name: module.name, base: module.base, size: module.size, path: module.path })}`,
-            );
-            ownRanges.push(module);
-        }
+    onAdded(module) {
+        const { base, name, size, path } = module;
+        if (name === 'libbeg5501.so') {
+            ProcMaps.addRange(module);
 
-        if (name === 'libcom.common.core.so') {
-            log(base.add(0x426bc), 'pp', {
-                call(args) {
-                    stalk(this.threadId, base);
+            const nop = (off) => {
+            Memory.protect(base.add(off), 4, 'rwx')
+            base.add(off).writeByteArray([0x1f, 0x20, 0x03, 0xd5])
+            Memory.protect(base.add(off), 4, 'r-x')
+            };
+            const bne = (off) => {
+            Memory.protect(base.add(off), 4, 'rwx')
+            base.add(off).writeByteArray([0x41, 0x01, 0x00, 0x54])
+            Memory.protect(base.add(off), 4, 'r-x')
+            };
+
+            const w = (off: any, barr: any) => {
+            Memory.protect(base.add(off), barr.length, 'rwx')
+            base.add(off).writeByteArray(barr)
+            Memory.protect(base.add(off), barr.length, 'r-x')
+            };
+
+            nop(0x72cc)
+            nop(0x704c)
+            bne(0x7e60)
+
+            w(0x2d0b0, [0x13])
+
+            Interceptor.attach(base.add(0x9840), {
+                onEnter(args) {
+                    console.log('jnionload');
+                    Native.stalk(Process.id, base);
                 },
-                ret(retval) {
-                    Stalker.unfollow(this.threadId);
+                onLeave(retval) {
+                    //Stalker.unfollow(Process.id);
+                    retval.replace(ptr(0x0))
                 },
             });
+            Native.log(base.add(0x6ff0), 'pps')
         }
-    },
+    }
+})
+Java.performNow(() => {
+    Anticloak.Country.mock('IN');
+    Anticloak.InstallReferrer.replace({
+    });
 });
+Java.perform(() => {
 
-setTimeout(async () => {
-    JniTrace.attach((x) => {
-        for (const range of ownRanges) {
-            if (isInRange(range, x.returnAddress)) {
-                return true;
-            }
-        }
-    }, true);
-}, 0);
+    hook('com.nvwiny.lbqtil.juasfn.KenActivity', 'getAnzhuang', {
+        replace: () => 'com.android.vending'
+    })
+})

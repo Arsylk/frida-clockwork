@@ -154,7 +154,7 @@ function initSoDump() {
 function dumpLib(name: string, sync = false) {
     if (!sync || Libc.pthread_mutex_lock(mutex_addr) === 0x0) {
         try {
-            const dlMain = dlsymSoFixer();
+            const dlMain: any = dlsymSoFixer();
             dlMain && dumpLibInternal(name);
         } catch (err) {
             logger.error(`dumpLib(sync=${sync}): ${err}`);

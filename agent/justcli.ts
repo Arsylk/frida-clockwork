@@ -61,7 +61,7 @@ const Vn = {
 //     });
 // });
 
-// JniTrace.attach((x) => Inject.isInOwnRange(x.returnAddress), true);
+JniTrace.attach((x) => Inject.isInOwnRange(x.returnAddress), true);
 Network.injectSsl();
 Network.injectCurl();
 Logcat.hookLogcat();
@@ -97,6 +97,13 @@ Java.performNow(() => {
     //         logger.printReturn(returnValue, returnType, id);
     //     },
     // });
+    ClassLoader.perform(() => {
+        uniqHook('com.liements.opmethor.LuanchActivity', 'startGame', {
+            replace(method, args) {
+                return method.call(this, '1');
+            },
+        });
+    });
 });
 
 // Cocos2dx.dump({ name: 'libcocos2djs.so', fn_dump: ptr(0x006edf7c), fn_key: ptr(0x006248e0) });

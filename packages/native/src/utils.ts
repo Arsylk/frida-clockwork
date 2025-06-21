@@ -67,7 +67,7 @@ Object.defineProperties(addressOf, {
 function addressOf(ptr: NativePointer, extended?: boolean) {
     if (!ptr || ptr === NULL || `${ptr}` === '0x0') return;
     const str = `${ProcMaps.addressOf(ptr)}`;
-    return str;
+    return extended === true ? `${str} ${ptr}` : str;
 
     const surround = (str: any) => `${black('⟨')}${str}${black('⟩')}`;
     const debug = DebugSymbol.fromAddress(ptr);

@@ -1,6 +1,6 @@
 import { ProcMaps } from '@clockwork/cmodules';
 import { Libc } from '@clockwork/common';
-import { logger } from '@clockwork/logging';
+import { log, logger } from '@clockwork/logging';
 import { addressOf } from './utils.js';
 
 function hookExit(predicate: (ptr: NativePointer) => boolean) {
@@ -118,6 +118,17 @@ function hook(predicate: (ptr: NativePointer) => boolean) {
     hookExit(predicate);
     hookSignal(predicate);
     hookPError(predicate);
+
+    const art_end = Process.getModuleByName('libart.so')
+        .enumerateSymbols()
+        .filter((x) => x.name.includes('art_sigsegv_fault'))[0]?.address;
+    art_end &&
+        Interceptor.attach(art_end, {
+            onEnter(args) {
+                logger.info({ tag: 'art_sigsegv_fault' }, `${addressOf(this.returnAddress)}`);
+                ProcMaps.printStacktrace(this.context);
+            },
+        });
 }
 
 export { hook, hookExit, hookKill };

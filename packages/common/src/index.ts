@@ -5,6 +5,8 @@ import { Linker, hookException } from './define/linker.js';
 import { enumerateMembers, findChoose, findClass, getFindUnique } from './search.js';
 import { SYSCALLS } from './define/syscalls.js';
 import type Java from 'frida-java-bridge';
+import { stringify } from './text.js';
+import { logger } from '@clockwork/logging';
 export { SYSCALLS as Syscalls };
 export * as Consts from './define/consts.js';
 export * as Std from './define/std.js';
@@ -93,6 +95,22 @@ Object.defineProperties(globalThis, {
         value: emitter,
     },
 });
+
+// biome-ignore lint/complexity/useArrowFunction: don't
+rpc.exports.init = function (stage, params: object) {
+    const ent = Reflect.ownKeys(params).reduce<PropertyDescriptorMap>((prev, crnt) => {
+        const value = Reflect.get(params, crnt);
+        Reflect.set(prev, crnt, {
+            value: value,
+            writable: false,
+            configurable: false,
+            enumerable: isIterable(value),
+        } as PropertyDescriptor);
+        return prev;
+    }, {} as PropertyDescriptorMap);
+    Object.defineProperties(globalThis, ent);
+    logger.info({ tag: 'externalargs' }, stringify({ stage: stage, params: params, pid: Process.id }));
+};
 
 export {
     Linker,

@@ -121,6 +121,7 @@ const ClassesString = {
     BatteryManager: 'android.os.BatteryManager',
     NetworkInfo: 'android.net.NetworkInfo',
     NetworkInfo$State: 'android.net.NetworkInfo$State',
+    IOException: 'java.io.IOException',
 };
 
 type ClassesType = PropertyJavaUseMapper<typeof ClassesString>;

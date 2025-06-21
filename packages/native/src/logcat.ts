@@ -6,7 +6,7 @@ function hookLogcat(fn?: (this: InvocationContext, msg: string) => void) {
     const liblog = Process.getModuleByName('liblog.so');
     const _isLoggable = Module.getGlobalExportByName('__android_log_is_loggable');
     Interceptor.replaceFast(_isLoggable, new NativeCallback(() => 1, 'bool', ['int', 'pointer', 'int']));
-    const vsnprintf = Module.getGlobalExportByName('vsnprintf');
+    const vsnprintf = liblog.getExportByName('vsnprintf');
     Inject.attachInModule('liblog.so', vsnprintf, {
         onEnter: function (args) {
             this.result = args[0];
