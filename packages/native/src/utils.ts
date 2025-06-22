@@ -12,6 +12,12 @@ function dellocate(ptr: NativePointer) {
     } catch (_) {}
 }
 
+function asExportedObject(module: Module) {
+    return Object.fromEntries(
+        module.enumerateExports().map(({name, address}) => [name, address])
+    )
+}
+
 function mkdir(path: string): boolean {
     const cPath = Memory.allocUtf8String(path);
     const dir = Libc.opendir(cPath);
@@ -67,7 +73,7 @@ Object.defineProperties(addressOf, {
 function addressOf(ptr: NativePointer, extended?: boolean) {
     if (!ptr || ptr === NULL || `${ptr}` === '0x0') return;
     const str = `${ProcMaps.addressOf(ptr)}`;
-    return extended === true ? `${str} ${ptr}` : str;
+    return extended === true ? `${str} ${DebugSymbol.fromAddress(ptr)}` : str;
 
     const surround = (str: any) => `${black('⟨')}${str}${black('⟩')}`;
     const debug = DebugSymbol.fromAddress(ptr);
@@ -163,6 +169,21 @@ function readTidName(tid: number): string {
     // return File.readAllText(`/proc/self/task/${tid}/comm`);
 }
 
+function getEnumerated(module: Module, symbol: string) {
+    for (const e of module.enumerateExports()) {
+        if (e.name === symbol) {
+            return e.address
+        }
+    }
+    for (const s of module.enumerateSymbols()) {
+        if (s.name === symbol) {
+            return s.address
+        }
+    }
+    return NULL
+}
+
+
 function tryDemangle<T extends string | null>(name: T): T {
     if (!name) return name;
     try {
@@ -237,4 +258,6 @@ export {
     readFpPath,
     readTidName,
     tryDemangle,
+    asExportedObject,
+    getEnumerated
 };

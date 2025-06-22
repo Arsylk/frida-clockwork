@@ -14,17 +14,9 @@ export * as Syscall from './syscall.js';
 export * as System from './system.js';
 export * as TheEnd from './theEnd.js';
 export * as Time from './time.js';
+export * as Stalker from './stalker.js';
 export * from './opengl.js';
-export * from './stalker.js';
-export {
-    addressOf,
-    dumpFile,
-    getSelfFiles,
-    getSelfProcessName,
-    mkdir,
-    readFpPath,
-    readFdPath,
-} from './utils.js';
+export * from './utils.js';
 const { gray, magenta: pink } = Color.use();
 const mutex = Memory.alloc(Process.pointerSize === 4 ? 24 : 40);
 

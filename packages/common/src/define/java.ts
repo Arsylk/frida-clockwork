@@ -122,6 +122,7 @@ const ClassesString = {
     NetworkInfo: 'android.net.NetworkInfo',
     NetworkInfo$State: 'android.net.NetworkInfo$State',
     IOException: 'java.io.IOException',
+    Os: 'android.system.Os',
 };
 
 type ClassesType = PropertyJavaUseMapper<typeof ClassesString>;

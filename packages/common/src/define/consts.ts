@@ -126,4 +126,25 @@ const oflags = {
     O_XATTR: 0x00040000,
 } as const;
 
-export { PATH_MAX, keynames, keyname, a_type, JavaPrimitive, mode, cmd };
+const whence = {
+    0: 'SEEK_SET',
+    1: 'SEEK_CUR',
+    2: 'SEEK_END',
+} as const;
+
+const prot = (flagOrPtr: number | NativePointer) => {
+    const flag = flagOrPtr instanceof NativePointer ? flagOrPtr.toInt32() : flagOrPtr
+    if (flag === 0) return 'PROT_NONE';
+    return (
+        [
+            [1, 'PROT_READ'],
+            [2, 'PROT_WRITE'],
+            [4, 'PROT_EXEC'],
+        ] as const
+    )
+        .filter(([f, _]) => f & flag)
+        .map(([_, s]) => s)
+        .join(' | ');
+}
+
+export { PATH_MAX, keynames, keyname, whence, prot, a_type, JavaPrimitive, mode, cmd };

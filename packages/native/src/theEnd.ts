@@ -113,11 +113,11 @@ function hookPError(predicate: (ptr: NativePointer) => boolean) {
         );
     } catch (error) {}
 }
-function hook(predicate: (ptr: NativePointer) => boolean) {
-    hookKill(predicate);
-    hookExit(predicate);
-    hookSignal(predicate);
-    hookPError(predicate);
+function hook(fn?: (this: InvocationContext) => void) {
+    hookKill(() => true);
+    hookExit(() => true);
+    hookSignal(() => true);
+    hookPError(() => true);
 
     const art_end = Process.getModuleByName('libart.so')
         .enumerateSymbols()
@@ -126,9 +126,12 @@ function hook(predicate: (ptr: NativePointer) => boolean) {
         Interceptor.attach(art_end, {
             onEnter(args) {
                 logger.info({ tag: 'art_sigsegv_fault' }, `${addressOf(this.returnAddress)}`);
+                logger.info({tag: 'art_sigsegv_fault'}, Thread.backtrace(this.context, Backtracer.ACCURATE).map(x => x).join('\t\n'))
                 ProcMaps.printStacktrace(this.context);
+                fn?.call(this)
             },
         });
 }
 
 export { hook, hookExit, hookKill };
+

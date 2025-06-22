@@ -42,7 +42,7 @@ Process.attachModuleObserver({
             Interceptor.attach(base.add(0x9840), {
                 onEnter(args) {
                     console.log('jnionload');
-                    Native.stalk(Process.id, base);
+                    Native.Stalker.stalk(Process.id, base);
                 },
                 onLeave(retval) {
                     //Stalker.unfollow(Process.id);
@@ -55,11 +55,9 @@ Process.attachModuleObserver({
 })
 Java.performNow(() => {
     Anticloak.Country.mock('IN');
-    Anticloak.InstallReferrer.replace({
-    });
+    Anticloak.InstallReferrer.replace({});
 });
 Java.perform(() => {
-
     hook('com.nvwiny.lbqtil.juasfn.KenActivity', 'getAnzhuang', {
         replace: () => 'com.android.vending'
     })

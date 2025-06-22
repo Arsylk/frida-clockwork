@@ -160,6 +160,15 @@ function hookNetwork() {
     });
 }
 
+function hookSystemOs() {
+    hook(Classes.Os, 'uname', {
+        after(method, returnValue, ...args) {
+            returnValue.release.value = '5.10';
+            returnValue.machine.value = '';
+        },
+    });
+}
+
 function generic() {
     hookInstallerPackage();
     hookLocationHardware();
@@ -168,6 +177,7 @@ function generic() {
     hookHasFeature();
     hookBatteryManager();
     hookWindowFlags();
+    hookSystemOs();
 }
 
 export { generic, hookAdId, hookDevice, hookNetwork, hookInstallerPackage, hookBatteryManager, hookSettings };

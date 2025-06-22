@@ -59,7 +59,7 @@ const LinkerSym = Object.assign(
 );
 
 namespace ProcMaps {
-    const rangesSize = Process.pointerSize * 2 * 8;
+    const rangesSize = Process.pointerSize * 2 * 16;
     const ranges = Memory.alloc(rangesSize);
     Memory.protect(ranges, rangesSize, 'rwx');
     export const cm = new CModule(fbase64(_procmaps), {
@@ -115,7 +115,6 @@ namespace ProcMaps {
     export function addRange(range: { base: NativePointer; size: number }) {
         const count = ranges.readU32();
         const addr = ranges.add(4 + Process.pointerSize * 2 * count);
-        0x171f88;
         addr.writePointer(range.base);
         addr.add(Process.pointerSize).writeU64(range.size);
         ranges.writeU32(count + 1);

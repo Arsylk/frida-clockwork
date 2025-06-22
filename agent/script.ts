@@ -888,12 +888,12 @@ Native.Pthread.hookPthread_create();
 // });
 //
 // Native.Strings.hookStrtoLong(predicate);
-Native.hookGlGetString();
+// Native.hookGlGetString();
 Network.attachGetAddrInfo(false);
 Native.System.hookGetauxval();
 Native.System.hookSystem();
 Native.System.hookPopen();
-Native.TheEnd.hook(predicate);
+Native.TheEnd.hook();
 
 // Interceptor.attach(Libc.vsnprintf, {
 //     onEnter(args) {
@@ -1085,7 +1085,7 @@ Process.attachModuleObserver({
                         // this.redo_call();
                         logger.info(
                             { tag: 'read' },
-                            `${readFdPath(this.fd)} ${context.x0.toInt32()} ${addressOf(context.lr)}`,
+                            `${Native.readFdPath(this.fd)} ${context.x0.toInt32()} ${Native.addressOf(context.lr)}`,
                         );
                     } else if (num === 67) {
                         const length = context.x0.toInt32();

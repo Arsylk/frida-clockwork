@@ -18,7 +18,7 @@ mutex_addr.writeByteArray(new Array(mutex_size).fill(0));
 const dumpedLibs = new Map();
 Libc.pthread_mutex_init(mutex_addr, NULL);
 
-let dlMain: NativeFunction<any, any>;
+let dlMain: NativeFunction<any, any> | null = null;
 function dlsymSoFixer() {
     if (dlMain) return dlMain;
     const filesDir = `/data/data/${getSelfProcessName()}`;
@@ -82,7 +82,7 @@ function dumpLibInternal(name: string) {
     logger.info({ tag: 'dumped' }, dumpedFile);
 
     try {
-        dlMain(
+        dlMain?.(
             Memory.allocUtf8String(dumpedFile),
             Memory.allocUtf8String(`${libso.base}`),
             Memory.allocUtf8String(finalOut),
@@ -96,6 +96,7 @@ function dumpLibInternal(name: string) {
 function dumpSoFile(ptr: NativePointer, size: number, fileName: string, dumpDir: string) {
     logger.info({tag: 'dump'}, `dd if=/proc/${Process.id}/mem of=/data/local/tmp/${fileName} skip=${Number(ptr)} bs=1 count=${size}`)
     const outPath = `${dumpDir}/${fileName}`;
+    Libc.mkdir(Memory.allocUtf8String(dumpDir), 0o755);
     Memory.protect(ptr, size, 'rwx');
     const buffer = ptr.readByteArray(size);
     //@ts-ignore

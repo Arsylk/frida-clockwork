@@ -113,7 +113,7 @@ class SoInfo {
     }
 
     getName(): string {
-        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
+        const ptr = SoInfo.#getSoName(this.#struct.ptr);
         return `${ptr.readCString()}`;
     }
 
