@@ -24,7 +24,6 @@ function getEnumerated(module, symbol) {
 }
 
 const ranges = new Array()
-let done = false;
 let found = false;
 const mprots = new Array()
 const dexes = new Map()
@@ -67,8 +66,7 @@ Interceptor.attach(libdl.getExportByName('dlopen'), {
     onLeave(retval) {
         const name = this.name
         if (name?.includes('libjiagu')) {
-            if (!done) {
-                done = true;
+            if (!found) {
                 hookmore(name)
             }
         }
@@ -116,33 +114,12 @@ function hookmore(name) {
                     console.log('[memfound]', `${inst.address} ${inst} ${f}`);
                     Interceptor.attach(f, {
                         onEnter(args) {
+                            this.handle = args[0]
                             this.symbol = args[1].readCString();
                         },
                         onLeave(retval) {
-                            const mapval = (symbol) => {
-                                switch (symbol) {
-                                    case 'rtld_db_dlactivity':
-                                        return ptr(0x0);
-                                    case '_ZN3art7Runtime9instance_E':
-                                    case '_ZN3art7Runtime15DisableVerifierEv': {
-                                        const module = dlopen(
-                                            Memory.allocUtf8String('/apex/com.android.art/lib64/libart.so'),
-                                            2,
-                                        );
-                                        return dlsym(module, Memory.allocUtf8String(symbol));
-                                    }
-                                    case '_ZNK3art16ArtDexFileLoader4OpenEPKhmRKNSt3__112basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEEjPKNS_10OatDexFileEbbPS9_NS3_10unique_ptrINS_16DexFileContainerENS3_14default_deleteISH_EEEE': {
-                                        const module = dlopen(
-                                            Memory.allocUtf8String('/apex/com.android.art/lib64/libdexfile.so'),
-                                            2,
-                                        );
-                                        return dlsym(module, Memory.allocUtf8String(symbol));
-                                    }
-                                }
-                                return null;
-                            };
-                            const newval = mapval(this.symbol);
-                            if (newval) retval.replace(newval);
+                            console.log(`[${f.sub(range.base)}]`, `${this.symbol} = ${retval} | 0x0`)
+                            retval.replace(ptr(0x0))
                         },
                     });
                     break

@@ -1,4 +1,5 @@
 import { getSelfFiles } from '@clockwork/native';
+import { dumpLib } from './soDump.js';
 
 export * from './dexDump.js';
 export * from './soDump.js';
@@ -14,5 +15,12 @@ function dumpExports(libname: string) {
         File.writeAllText(`${getSelfFiles()}/${libname}_exports.json`, text);
     }
 }
+
+Object.defineProperties(globalThis, {
+    dumpLib: {
+        value: dumpLib,
+        writable: false
+    }
+})
 
 export { dumpExports };

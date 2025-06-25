@@ -1,7 +1,7 @@
 import * as Native from '@clockwork/native';
 import * as Anticloak from '@clockwork/anticloak';
 import * as Cocos2dx from '@clockwork/cocos2dx';
-import { Text, emitter, enumerateMembers, getFindUnique, hookException } from '@clockwork/common';
+import { ClassesString, Text, emitter, enumerateMembers, findChoose, getFindUnique, hookException } from '@clockwork/common';
 import { dumpLib, hookArtLoader, initDexDump, initSoDump } from '@clockwork/dump';
 import {
     ClassLoader,
@@ -18,6 +18,7 @@ import { logger } from '@clockwork/logging';
 import { Inject, Logcat, Strings, System, addressOf, getSelfFiles, readFdPath } from '@clockwork/native';
 import * as Network from '@clockwork/network';
 import Java from 'frida-java-bridge';
+import { ProcMaps } from '@clockwork/cmodules';
 const uniqHook = getHookUnique(false);
 const uniqFind = getFindUnique(false);
 const uniqEnum = (clazzName: string, depth?: number) => {
@@ -60,8 +61,7 @@ const Vn = {
 //         logging: { call: false, return: false },
 //     });
 // });
-
-JniTrace.attach((x) => Inject.isInOwnRange(x.returnAddress), true);
+JniTrace.attach((x) => ProcMaps.inRange(x.returnAddress), true);
 Network.injectSsl();
 Network.injectCurl();
 Logcat.hookLogcat();
@@ -106,7 +106,7 @@ Java.performNow(() => {
     });
 });
 
-// Cocos2dx.dump({ name: 'libcocos2djs.so', fn_dump: ptr(0x006edf7c), fn_key: ptr(0x006248e0) });
+Cocos2dx.dump({ name: 'libcocos.so', fn_dump: ptr(0x00b34c10), fn_key: ptr(0x00b13828) });
 // Cocos2dx.hookLocalStorage(function (key) {
 //     logger.info({ tag: 'localcocos' }, `${key} -> ${this.fallback()}`);
 //     return undefined;
@@ -115,9 +115,6 @@ Java.performNow(() => {
 // Unity.attachScenes();
 // Unity.attachStrings();
 System.hookSystem();
-// Process.attachModuleObserver({
-//     onAdded(module) {
-//         if (module.name === 'libcom.common.core.so') {
 //             Native.log(module.base.add(0x426bc), 'pp', {
 //                 call(args) {
 //                     Native.stalk(this.threadId, module.base);
@@ -187,8 +184,24 @@ System.hookSystem();
 //     },
 // });
 
+let has = false
+Process.attachModuleObserver({
+    onAdded(module) {
+        if (module.name === 'libumijazydet.so') {
+            has = true
+        }
+    }
+})
+const fn = () => {
+    if (!has) return
+    const INR = 'utm_source=facebook_ads&utm_medium=Non-organic&media_source=true_network&utm_content=Non-organic&http_referrer=BingSearch&utm_campaign=Non-organic&campaign=Non-organic&af_ad=${AD_ID}'
+    findChoose(ClassesString.SharedPreferencesImpl)[0]?.edit()?.putBoolean('kdfjjsyduie', false)?.commit()
+    findChoose('com.sftmudy.eagvutj.App')[0]?.umijazydetVerity(INR)
+}
 Java.performNow(() => {
-    ClassLoader.perform(() => {});
+    ClassLoader.perform(() => {
+        uniqFind('com.sftmudy.eagvutj.App', fn)
+    });
 });
 
 // Strings.hookStrstr(Inject.isInOwnRange);

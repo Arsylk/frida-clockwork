@@ -67,7 +67,8 @@ void onLeave(GumInvocationContext *ic) {
   if (inRange(retaddr)) {
     hex_dump(is->arg0, is->size > 500 ? 500 : is->size);
     hex_dump(is->arg1, is->size > 500 ? 500 : is->size);
-    mklog("%p %p %d %s", is->arg0, is->arg1, is->size, addressOf(retaddr));
+    mklog("%p %p %d = 0x%x %s", is->arg0, is->arg1, is->size, retval,
+          addressOf(retaddr));
   }
 }
 

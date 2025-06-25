@@ -86,14 +86,16 @@ function performReplace(details: ReferrerDetails, client: Java.Wrapper) {
                 msg += `${Color.bracket('(')}${Color.number('0')}${Color.bracket(')')}`;
                 logger.info(msg);
 
-                hook(listenerClass, onFinishedMethod, {
-                    replace(method, ...args) {
-                        if (isFinished) return;
-                        isFinished = true;
-                    },
-                });
+                // make sure this method runs exactly once, with 0 as the argument
+                const onFinishedHook = listenerClass[onFinishedMethod];
+                onFinishedHook.implementation = function (a0) {
+                    logger.info({ tag: 'ref' }, `onFinsihed ${a0} skip: ${isFinished}`);
+                    if (isFinished) return;
+                    isFinished = true;
+                    onFinishedHook.call(this, 0);
+                };
 
-                listener?.[onFinishedMethod]?.(0);
+                // listener?.[onFinishedMethod]?.(0);
             },
         });
 

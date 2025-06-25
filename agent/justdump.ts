@@ -1,6 +1,7 @@
 import { memmove, memcmp, ProcMaps } from '@clockwork/cmodules';
 import { hookException, isIterable, Text, Linker, tryNull, Consts, isNully } from '@clockwork/common';
 import { dumpLib } from '@clockwork/dump';
+import { hook } from '@clockwork/hooks';
 import { attach } from '@clockwork/jnitrace';
 import { logger } from '@clockwork/logging';
 import {
@@ -25,12 +26,13 @@ const mprots = new Array<{base: NativePointer, size: number}>()
 const dexes = new Map<string, number>()
 
 const libdl = Process.getModuleByName('libdl.so');
+const dladdr = new NativeFunction(libdl.getExportByName('dladdr'), 'int', ['pointer', 'pointer'])
 log(libdl.getExportByName('dl_iterate_phdr'), 'ps', {
     predicate: ProcMaps.inRange,
 });
-log(libdl.getExportByName('dlsym'), 'ps', {
-    predicate: ProcMaps.inRange,
-});
+// log(libdl.getExportByName('dlsym'), 'ps', {
+//     predicate: ProcMaps.inRange,
+// });
 log(libdl.getExportByName('dlclose'), 'p', {
     predicate: ProcMaps.inRange,
 });
@@ -45,7 +47,7 @@ log(libdl.getExportByName('dlopen'), 'si', {
             if (!done) {
                 done = true;
                 hookmore(this.name);
-            }
+            } 
         }
     },
 });
@@ -75,8 +77,6 @@ log(libc.getExportByName('mprotect'), 'pii', {
 // });
 // log(libc.getExportByName('__snprintf_chk'), 'siiis');
 // log(libc.getExportByName('fopen'), 'si', { predicate: ProcMaps.inRange, });
-// Interceptor.attach(libc.getExportByName('memmove'), memmove);
-// Interceptor.attach(libc.getExportByName('memcmp'), memcmp);
 
 // Pthread.hookPthread_create();
 // Interceptor.attach(Module.getGlobalExportByName('android_dlopen_ext'), {
@@ -92,21 +92,12 @@ log(libc.getExportByName('mprotect'), 'pii', {
 // });
 
 // Java.performNow(() => {
-//     const uniq = getHookUnique();
-//     const tryme = () => {
-//         uniq('com.igbr.shn.ghi.lib2.FontUtils', 'initAction', {
-//             replace(method, activity, flag) {
-//                 return method.call(this, activity, true);
-//             },
-//         });
-//     };
-//     hook(Classes.DexPathList, 'addDexPath', {
-//         after(method, returnValue, ...args) {
-//             tryme();
+//     hook(Classes.SharedPreferencesImpl, 'getString', {
+//         replace(method, ...args) {
+//             if (args[0] === 'promo_url') return 'https://google.pl/search?q=hi'
+//             if (args[0] === 'referrer' || args[0] === 'extraReferrer') return 'utm_content=Non-organic'
+//             return method.call(this, ...args)
 //         },
-//     });
-//     ClassLoader.perform(() => {
-//         tryme();
 //     });
 // });
 
@@ -114,6 +105,9 @@ log(libc.getExportByName('mprotect'), 'pii', {
 // log(libc.getExportByName('strlen'), 's', { predicate: ProcMaps.inRange });
 // log(libc.getExportByName('strstr'), 'ss', { predicate: ProcMaps.inRange });
 // log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('lseek'), '0pp', { predicate: ProcMaps.inRange, transform: {
+    0: (ptr) => readFdPath(ptr.toInt32())
+} });
 // log(libc.getExportByName('strcat'), 's', { call: false, ret: false, predicate: ProcMaps.inRange });
 // log(Libc.strcpy, '_s', { predicate: ProcMaps.inRange });
 // Interceptor.replace(
@@ -127,18 +121,24 @@ log(libc.getExportByName('mprotect'), 'pii', {
 //         ['pointer'],
 //     ),
 // );
+// Interceptor.attach(Libc.memmove, memmove)
+// Interceptor.attach(Libc.memcmp, memcmp)
 
-attach((x) => ProcMaps.inRange(x.returnAddress), true);
+attach((x) => ProcMaps.inRange(x.returnAddress), false);
 Process.attachModuleObserver({
     onAdded(module) {
         const { base, name, size, path } = module;
         if (
             !path.includes(Reflect.get(globalThis, 'packageName')) ||
             name === 'libmonochrome_64.so' ||
-            name === 'libhwui.so' 
+            name === 'libunity.so' ||
+            name === 'libil2cpp.so' ||
+            name === 'libmain.so' ||
+            name === 'libhwui.so' ||
+            name === 'libsigner.so'
         )
             return;
-        if (name === 'base.odex') {
+        if (name === 'base.odex ') {
             const libart = Process.getModuleByName('libart.so')
             // log(getEnumerated(libart, '_ZN3art11ClassLinker15RegisterDexFileERKNS_7DexFileENS_6ObjPtrINS_6mirror11ClassLoaderEEE'), 'ppp')
             log(getEnumerated(libart, '_ZN3art11ClassLinker11DefineClassEPNS_6ThreadEPKcmNS_6HandleINS_6mirror11ClassLoaderEEERKNS_7DexFileERKNS_3dex8ClassDefE'), 'ppsppp', {
@@ -219,7 +219,7 @@ function hookmore(name: string) {
 }
 
 function hooksyscall() {
-    hookException([62], {
+    hookException([56,], {
         onBefore(context, num) {
             if (num === 56) {
                 const path = context.x1.readCString();
