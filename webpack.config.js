@@ -11,7 +11,6 @@ export default {
     justcli: "./agent/justcli.ts",
     justcloak: "./agent/justcloak.ts",
     libreveny: "./agent/libreveny.so.ts",
-    sofix: "./agent/sofix.ts",
   },
   output: {
     filename: "[name].js",
