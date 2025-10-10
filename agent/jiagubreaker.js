@@ -29,8 +29,8 @@ const dexes = new Map();
 
 const libart = Process.getModuleByName("libart.so");
 const linker64 = Process.getModuleByName("linker64");
-
 const libc = Process.getModuleByName("libc.so");
+
 const dlopen = new NativeFunction(libc.getExportByName("dlopen"), "pointer", [
   "pointer",
   "int",
@@ -62,15 +62,13 @@ Interceptor.attach(libc.getExportByName("mprotect"), {
 const libdl = Process.getModuleByName("libdl.so");
 Interceptor.attach(libdl.getExportByName("dlopen"), {
   onEnter(args) {
-    if (inRanges(this.returnAddress)) {
-      const name = args[0].readCString();
-      this.name = name;
-      console.log("[dlopen]", name);
-    }
+    const name = args[0].readCString();
+    this.name = name;
+    console.log("[dlopen]", name);
   },
   onLeave(retval) {
     const name = this.name;
-    if (name?.includes("libjiagu")) {
+    if (name) {
       if (!found) {
         hookmore(name);
       }
@@ -80,11 +78,15 @@ Interceptor.attach(libdl.getExportByName("dlopen"), {
 
 Process.attachModuleObserver({
   onAdded(module) {
-    const { base, name, size } = module;
+    const { base, name, size, path } = module;
+    console.log(
+      "[phdr]",
+      `{ name: ${name}, base: ${base}, size: ${size}, path: ${path} }`
+    );
     if (name === "base.odex") {
       hookdex(libart);
       hookhide(linker64, (name) => {
-        for (const target of ["frida", "memfd", "libart.so"]) {
+        for (const target of ["frida", "memfd", "libart.so", "libdl.so"]) {
           if (name.includes(target)) {
             return true;
           }
@@ -93,14 +95,41 @@ Process.attachModuleObserver({
       });
       ranges.push({ base: base, size: size });
     }
-    if (name.includes("libjiagu")) {
+    if (name.includes("libjiagu") || name.includes("l02e9294c")) {
       ranges.push({ base: base, size: size });
+      // Interceptor.attach(
+      //   getEnumerated(module, "interpreter_wrap_int64_t_bridge"),
+      //   {
+      //     onEnter({ 0: a0, 1: a1, 2: a2, 3: a3, 4: a4, 5: a5 }) {
+      //       console.log("[interpreter_wrap_int64_t_bridge]", [
+      //         a0.sub(base),
+      //         a1,
+      //         a2.sub(base),
+      //         a3.sub(base),
+      //         a4,
+      //         a5,
+      //       ]);
+      //       console.log(
+      //         Thread.backtrace(this.context, Backtracer.FUZZY)
+      //           .map(DebugSymbol.fromAddress)
+      //           .join("\n\t")
+      //       );
+      //     },
+      //     onLeave(retval) {
+      //       console.log("[interpreter_wrap_int64_t_bridge]", retval);
+      //     },
+      //   }
+      // );
     }
   },
 });
 
 function hookmore(name) {
-  const module = Process.getModuleByName(name);
+  let module = Process.findModuleByName(name);
+  if (name === "libc.so") module ??= libc;
+  if (name === "libart.so") module ??= libart;
+  if (name === "linker64") module ??= linker64;
+  if (!module) return;
   for (const range of [module, ...mprots]) {
     console.log("[memscan]", `${range.base} - ${range.base.add(range.size)}`);
     for (
@@ -123,6 +152,7 @@ function hookmore(name) {
           const op = inst.operands[0];
           const f = ptr(`${op.value}`);
           console.log("[memfound]", `${inst.address} ${inst} ${f}`);
+          let i = 4;
           Interceptor.attach(f, {
             onEnter(args) {
               this.handle = args[0];

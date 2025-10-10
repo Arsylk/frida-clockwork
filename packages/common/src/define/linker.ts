@@ -8,131 +8,146 @@ const { soinfo } = LinkerStruct;
 const { red, gray, dim } = Color.use();
 
 let _dl_solist_get_head = NULL;
+let _dl_solist_remove_soinfo = NULL;
 let soinfo_get_soname = NULL;
 let soinfo_get_realpath = NULL;
+let soinfo_get_handle = NULL;
 
 const linker = Process.getModuleByName('linker64');
 const syms = linker.enumerateSymbols();
 for (const i in syms) {
-    const sym = syms[i];
+  const sym = syms[i];
 
-    switch (sym.name) {
-        case '__dl__Z15solist_get_headv':
-            _dl_solist_get_head = sym.address;
-            break;
-        case '__dl__ZNK6soinfo10get_sonameEv':
-            soinfo_get_soname = sym.address;
-            break;
-        case '__dl__ZNK6soinfo12get_realpathEv':
-            soinfo_get_realpath = sym.address;
-            break;
-    }
+  switch (sym.name) {
+    case '__dl__Z15solist_get_headv':
+      _dl_solist_get_head = sym.address;
+      break;
+    case '__dl__Z20solist_remove_soinfoP6soinfo':
+      _dl_solist_remove_soinfo = sym.address;
+      break;
+    case '__dl__ZNK6soinfo10get_sonameEv':
+      soinfo_get_soname = sym.address;
+      break;
+    case '__dl__ZNK6soinfo12get_realpathEv':
+      soinfo_get_realpath = sym.address;
+      break;
+    case '__dl__ZN6soinfo9to_handleEv':
+      soinfo_get_handle = sym.address;
+      break;
+  }
 }
 
 if (`${soinfo_get_soname}` === '0x0') {
-    soinfo_get_soname = new NativeCallback((ptr: NativePointer) => ptr.readPointer(), 'pointer', ['pointer']);
+  soinfo_get_soname = new NativeCallback((ptr: NativePointer) => ptr.readPointer(), 'pointer', ['pointer']);
 }
 
 namespace Linker {
-    const _getSoListHead = new NativeFunction(_dl_solist_get_head, 'pointer', []);
+  const _getSoListHead = new NativeFunction(_dl_solist_get_head, 'pointer', []);
+  const _removeSoInfo = new NativeFunction(_dl_solist_remove_soinfo, 'void', ['pointer']);
 
-    export function getSoListHead() {
-        const ptr = _getSoListHead();
-        return new SoInfo(ptr);
+  export function getSoListHead() {
+    const ptr = _getSoListHead();
+    return new SoInfo(ptr);
+  }
+
+  /**
+   * Patches the so list to bypass frida detection
+   *
+   * This should be called directly before your module
+   * ex. {@see "android_dlopen_ext"}
+   */
+  export function patchSoList(predicate?: (name: string) => boolean) {
+    const _predicate = (name: string) => {
+      for (const match of ['frida']) if (name.includes(match)) return true;
+      return false;
+    };
+    const skip: string[] = [];
+
+    let item: SoInfo | null = Linker.getSoListHead();
+    let prev: SoInfo | null = null;
+    while (item && !isNully(item.ptr)) {
+      const name = item.getName();
+      const next = item.getNext();
+      if (_predicate(name) || predicate?.(name) === true) {
+        // prev?.setNext(next);
+        _removeSoInfo(item.ptr);
+        skip.push(name);
+      }
+      prev = item;
+      item = next;
     }
 
-    /**
-     * Patches the so list to bypass frida detection
-     *
-     * This should be called directly before your module
-     * ex. {@see "android_dlopen_ext"}
-     */
-    export function patchSoList(predicate?: (name: string) => boolean) {
-        const _predicate = (name: string) => {
-            for (const match of ['frida']) if (name.includes(match)) return true;
-            return false;
-        };
-        const skip: string[] = [];
-
-        let item: SoInfo | null = Linker.getSoListHead();
-        let prev: SoInfo | null = null;
-        while (item) {
-            const name = item.getName();
-            const next = item.getNext();
-            // logger.info({ tag: name }, `${next}`);
-            if (_predicate(name) || predicate?.(name) === true) {
-                prev?.setNext(next);
-                skip.push(name);
-            }
-            prev = item;
-            item = next;
-        }
-
-        let sb = '';
-        sb += gray('[ ');
-        for (let i = 0; i < skip.length; i += 1) {
-            sb += dim(red(`${skip[i]}`));
-            sb += i + 1 < skip.length ? ', ' : ' ';
-        }
-        sb += gray(']');
-        const msg = `skipped ${sb}`;
-        logger.info({ tag: 'linker' }, msg);
+    let sb = '';
+    sb += gray('[ ');
+    for (let i = 0; i < skip.length; i += 1) {
+      sb += dim(red(`${skip[i]}`));
+      sb += i + 1 < skip.length ? ', ' : ' ';
     }
+    sb += gray(']');
+    const msg = `skipped ${sb}`;
+    logger.info({ tag: 'linker' }, msg);
+  }
 
-    export function getParsedList() {
-        const list: { name: string; base: NativePointer; size: number }[] = [];
-        for (let item = getSoListHead() as SoInfo | null; item; item = item.getNext()) {
-            list.push({ name: item.getName(), base: item.getBase(), size: item.getSize() });
-        }
-        return list;
+  export function getParsedList() {
+    const list: { name: string; base: NativePointer; size: number }[] = [];
+    for (let item = getSoListHead() as SoInfo | null; item; item = item.getNext()) {
+      list.push({ name: item.getName(), base: item.getBase(), size: item.getSize() });
     }
+    return list;
+  }
 }
 
 class SoInfo {
-    static #getSoName = new NativeFunction(soinfo_get_soname, 'pointer', ['pointer']);
-    static #getRealpath = new NativeFunction(soinfo_get_realpath, 'pointer', ['pointer']);
+  static #getSoName = new NativeFunction(soinfo_get_soname, 'pointer', ['pointer']);
+  static #getRealpath = new NativeFunction(soinfo_get_realpath, 'pointer', ['pointer']);
+  static #getHandle = new NativeFunction(soinfo_get_handle, 'pointer', ['pointer']);
 
-    get ptr(): NativePointer {
-        return this.#struct.ptr;
-    }
-    #struct: ReturnType<typeof soinfo>;
-    constructor(ptr: NativePointer) {
-        this.#struct = soinfo(ptr);
-    }
+  get ptr(): NativePointer {
+    return this.#struct.ptr;
+  }
+  #struct: ReturnType<typeof soinfo>;
+  constructor(ptr: NativePointer) {
+    this.#struct = soinfo(ptr);
+  }
 
-    setNext(ptr: SoInfo | null) {
-        Memory.protect(this.#struct.next.ptr, Process.pointerSize, 'rwx');
-        const value = ptr ? ptr.#struct.ptr : NULL;
-        this.#struct.next.ptr.writePointer(value);
-    }
+  setNext(ptr: SoInfo | null) {
+    Memory.protect(this.#struct.next.ptr, Process.pointerSize, 'rwx');
+    const value = ptr ? ptr.#struct.ptr : NULL;
+    this.#struct.next.ptr.writePointer(value);
+  }
 
-    getNext(): SoInfo | null {
-        const ptr = this.#struct.next.value;
-        if (isNully(ptr)) return null;
-        return new SoInfo(ptr);
-    }
+  getNext(): SoInfo | null {
+    const ptr = this.#struct.next.value.readPointer();
+    if (isNully(ptr)) return null;
+    return new SoInfo(ptr);
+  }
 
-    getName(): string {
-        const ptr = SoInfo.#getSoName(this.#struct.ptr);
-        return `${ptr.readCString()}`;
-    }
+  getName(): string {
+    const ptr = SoInfo.#getSoName(this.#struct.ptr);
+    return `${ptr.readCString()}`;
+  }
 
-    getRealpath(): string {
-        const ptr = SoInfo.#getRealpath(this.#struct.ptr);
-        return `${ptr.readCString()}`;
-    }
+  getRealpath(): string {
+    const ptr = SoInfo.#getRealpath(this.#struct.ptr);
+    return `${ptr.readCString()}`;
+  }
 
-    getBase(): NativePointer {
-        return this.#struct.base.value;
-    }
+  getHandle(): NativePointer {
+    const ptr = SoInfo.#getHandle(this.#struct.ptr);
+    return ptr;
+  }
 
-    getSize(): number {
-        return this.#struct.size.value.toNumber();
-    }
+  getBase(): NativePointer {
+    return this.#struct.base.value.readPointer();
+  }
+
+  getSize(): number {
+    return this.#struct.size.value.toNumber();
+  }
 }
 
 const cm = new CModule(
-    `
+  `
 #include <gum/guminterceptor.h>
 #include <stdio.h>
 #include <string.h>
@@ -456,38 +471,36 @@ int install_filter(__u32 nr) {
     return 0;
 }
 `,
-    {
-        solist_get_head: _dl_solist_get_head,
-        soinfo_get_soname: soinfo_get_soname,
-        pthread_create: Libc.pthread_create,
-        pthread_mutex_init: Libc.pthread_mutex_init,
-        pthread_mutex_lock: Libc.pthread_mutex_lock,
-        pthread_mutex_unlock: Libc.pthread_mutex_unlock,
-        prctl: Libc.prctl,
-        free: Libc.free,
-        dladdr: Libc.dladdr,
-        syscall: Libc.syscall,
-        sscanf: Libc.sscanf,
-        open: Libc.open,
-        fopen: Libc.fopen,
-        fdopen: Libc.fdopen,
-        fgets: Libc.fgets,
-        fclose: Libc.fclose,
-        close: Libc.close,
-        sprintf: Libc.sprintf,
-        strlen: Libc.strlen,
-        strchr: Libc.strchr,
-        strcpy: Libc.strcpy,
-        strncpy: Libc.strncpy,
-        strtok: Libc.strtok,
-        strtok_r: Libc.strtok_r,
-        strtoul: Libc.strtoul,
-        on_message: new NativeCallback(
-            (ptr) => logger.info({ tag: 'cmodule' }, `${ptr.readCString()}`),
-            'void',
-            ['pointer'],
-        ),
-    },
+  {
+    solist_get_head: _dl_solist_get_head,
+    soinfo_get_soname: soinfo_get_soname,
+    pthread_create: Libc.pthread_create,
+    pthread_mutex_init: Libc.pthread_mutex_init,
+    pthread_mutex_lock: Libc.pthread_mutex_lock,
+    pthread_mutex_unlock: Libc.pthread_mutex_unlock,
+    prctl: Libc.prctl,
+    free: Libc.free,
+    dladdr: Libc.dladdr,
+    syscall: Libc.syscall,
+    sscanf: Libc.sscanf,
+    open: Libc.open,
+    fopen: Libc.fopen,
+    fdopen: Libc.fdopen,
+    fgets: Libc.fgets,
+    fclose: Libc.fclose,
+    close: Libc.close,
+    sprintf: Libc.sprintf,
+    strlen: Libc.strlen,
+    strchr: Libc.strchr,
+    strcpy: Libc.strcpy,
+    strncpy: Libc.strncpy,
+    strtok: Libc.strtok,
+    strtok_r: Libc.strtok_r,
+    strtoul: Libc.strtoul,
+    on_message: new NativeCallback((ptr) => logger.info({ tag: 'cmodule' }, `${ptr.readCString()}`), 'void', [
+      'pointer',
+    ]),
+  },
 );
 const CM_pthread_syscall_create = new NativeFunction(cm.pthread_syscall_create, 'pointer', []);
 const CM_enqueue_task = new NativeFunction(cm.enqueue_task, 'pointer', ['pointer', 'pointer', 'int']);
@@ -499,58 +512,58 @@ const CM_find_so_info = new NativeFunction(cm.find_so_info, 'pointer', ['pointer
 let sysThread = NULL;
 
 type SyscallContext = {
-    readonly rawargs: NativePointer;
-    redo_call: () => void;
-    [key: string]: any;
+  readonly rawargs: NativePointer;
+  redo_call: () => void;
+  [key: string]: any;
 };
 type SyscallParams = {
-    logging?: true;
-    onBefore?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
-    onAfter?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
+  logging?: true;
+  onBefore?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
+  onAfter?: (this: SyscallContext, context: Arm64CpuContext, num: number) => void;
 };
 function hookException(nums: number[], params: SyscallParams) {
-    const rawargs = Memory.alloc(7 * Process.pointerSize);
-    sysThread = CM_pthread_syscall_create();
-    Process.setExceptionHandler((details) => {
-        const offset = details.context.pc.sub(0x4);
-        if (
-            (details as any).message === 'system error' &&
-            details.type === 'system' &&
-            offset.readUInt() === 0xd4000001
-        ) {
-            CM_lock(sysThread);
-            const num = (details.context as Arm64CpuContext).x8.toInt32();
-            // store current registers
-            const args: NativePointer[] = new Array(6);
-            rawargs.writePointer((details.context as Arm64CpuContext).x8);
-            for (let i = 0; i < 6; i += 1) {
-                args[i] = Reflect.get(details.context, `x${i}`);
-                rawargs.add((i + 1) * Process.pointerSize).writePointer(args[i]);
-            }
-            params.logging && logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
+  const rawargs = Memory.alloc(7 * Process.pointerSize);
+  sysThread = CM_pthread_syscall_create();
+  Process.setExceptionHandler((details) => {
+    const offset = details.context.pc.sub(0x4);
+    if (
+      (details as any).message === 'system error' &&
+      details.type === 'system' &&
+      offset.readUInt() === 0xd4000001
+    ) {
+      CM_lock(sysThread);
+      const num = (details.context as Arm64CpuContext).x8.toInt32();
+      // store current registers
+      const args: NativePointer[] = new Array(6);
+      rawargs.writePointer((details.context as Arm64CpuContext).x8);
+      for (let i = 0; i < 6; i += 1) {
+        args[i] = Reflect.get(details.context, `x${i}`);
+        rawargs.add((i + 1) * Process.pointerSize).writePointer(args[i]);
+      }
+      params.logging && logger.info({ tag: 'syscall' }, `${num} -> ${stringify(SYSCALLS[`${num}`])}`);
 
-            const thisCtx = {
-                get rawargs() {
-                    return rawargs;
-                },
-                redo_call: () => {
-                    const retval = CM_enqueue_task(sysThread, rawargs, 0);
-                    (details.context as Arm64CpuContext).x0 = retval;
-                },
-            };
-            params.onBefore?.call(thisCtx, details.context as Arm64CpuContext, num);
-            const retval = CM_enqueue_task(sysThread, rawargs, 0);
-            (details.context as Arm64CpuContext).x0 = retval;
-            params?.onAfter?.call(thisCtx, details.context as Arm64CpuContext, num);
+      const thisCtx = {
+        get rawargs() {
+          return rawargs;
+        },
+        redo_call: () => {
+          const retval = CM_enqueue_task(sysThread, rawargs, 0);
+          (details.context as Arm64CpuContext).x0 = retval;
+        },
+      };
+      params.onBefore?.call(thisCtx, details.context as Arm64CpuContext, num);
+      const retval = CM_enqueue_task(sysThread, rawargs, 0);
+      (details.context as Arm64CpuContext).x0 = retval;
+      params?.onAfter?.call(thisCtx, details.context as Arm64CpuContext, num);
 
-            CM_unlock(sysThread);
-            return true;
-        }
-        return false;
-    });
+      CM_unlock(sysThread);
+      return true;
+    }
+    return false;
+  });
 
-    const install = new NativeFunction(cm.install_filter, 'void', ['int']);
-    for (const num of new Set<number>(nums)) install(num);
+  const install = new NativeFunction(cm.install_filter, 'void', ['int']);
+  for (const num of new Set<number>(nums)) install(num);
 }
 
-export { Linker, hookException };
+export { Linker, SoInfo, hookException };

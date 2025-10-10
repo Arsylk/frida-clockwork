@@ -4,127 +4,170 @@ import _memcmp from '@src/memcmp.c';
 import _memmove from '@src/memmove.c';
 import _procmaps from '@src/procmaps.c';
 import _inject from '@src/inject.c';
+import _elfheader from '@src/elfheader.c';
+import _sofixer from '@src/sofixer.c';
 
 function base64(strs: string) {
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
-    const str = strs.replace(/\s+/g, '').replace(/=/g, ''); // Remove padding as well
-    const base64Map = {};
-    for (let i = 0; i < base64Chars.length; i++) {
-        base64Map[base64Chars[i]] = i;
-    }
+  const str = strs.replace(/\s+/g, '').replace(/=/g, ''); // Remove padding as well
+  const base64Map = {};
+  for (let i = 0; i < base64Chars.length; i++) {
+    base64Map[base64Chars[i]] = i;
+  }
 
-    let binaryString = '';
-    for (let i = 0; i < str.length; i++) {
-        const value = base64Map[str[i]]; // Get the 6-bit value
-        binaryString += value.toString(2).padStart(6, '0'); // Convert to 6-bit binary string
-    }
+  let binaryString = '';
+  for (let i = 0; i < str.length; i++) {
+    const value = base64Map[str[i]]; // Get the 6-bit value
+    binaryString += value.toString(2).padStart(6, '0'); // Convert to 6-bit binary string
+  }
 
-    let output = '';
-    for (let i = 0; i < binaryString.length; i += 8) {
-        const byte = binaryString.slice(i, i + 8); // Get an 8-bit chunk
-        const charCode = Number.parseInt(byte, 2); // Convert the binary chunk to a decimal value
-        output += String.fromCharCode(charCode); // Convert the decimal value to an ASCII character
-    }
+  let output = '';
+  for (let i = 0; i < binaryString.length; i += 8) {
+    const byte = binaryString.slice(i, i + 8); // Get an 8-bit chunk
+    const charCode = Number.parseInt(byte, 2); // Convert the binary chunk to a decimal value
+    output += String.fromCharCode(charCode); // Convert the decimal value to an ASCII character
+  }
 
-    return output;
+  return output;
 }
 
 function fbase64(input: string) {
-    const fixed = input.substring(input.indexOf(',') + 1);
-    return base64(fixed);
+  const fixed = input.substring(input.indexOf(',') + 1);
+  return base64(fixed);
 }
 
 function callback<T extends CModule>(cmodule: T) {
-    return cmodule as T & InvocationListenerCallbacks;
+  return cmodule as T & InvocationListenerCallbacks;
 }
 
 const get_frida_log = (tag: string) =>
-    new NativeCallback(
-        (str) => {
-            const msg = str.readCString();
-            logger.info({ tag: tag }, `${msg}`);
-        },
-        'void',
-        ['pointer'],
-    );
+  new NativeCallback(
+    (str) => {
+      const msg = str.readCString();
+      logger.info({ tag: tag }, `${msg}`);
+    },
+    'void',
+    ['pointer'],
+  );
 
 const LinkerSym = Object.assign(
-    {},
-    ...Process.getModuleByName('linker64')
-        .enumerateSymbols()
-        .map(({ name, address }) => {
-            return { [name]: address };
-        }),
+  {},
+  ...Process.getModuleByName('linker64')
+    .enumerateSymbols()
+    .map(({ name, address }) => {
+      return { [name]: address };
+    }),
 );
 
 namespace ProcMaps {
-    const rangesSize = Process.pointerSize * 2 * 16;
-    const ranges = Memory.alloc(rangesSize);
-    Memory.protect(ranges, rangesSize, 'rwx');
-    export const cm = new CModule(fbase64(_procmaps), {
-        frida_log: get_frida_log('procmaps'),
-        perror: Module.getGlobalExportByName('perror'),
-        _Unwind_Backtrace: Module.getGlobalExportByName('_Unwind_Backtrace'),
-        _Unwind_GetIP: Module.getGlobalExportByName('_Unwind_GetIP'),
-        dl_soinfo_get_soname: LinkerSym.__dl__ZNK6soinfo10get_sonameEv,
-        dl_solist_get_head: LinkerSym.__dl__Z15solist_get_headv,
-        sprintf: Libc.sprintf,
-        isprint: Libc.isprint,
-        close: Libc.close,
-        fclose: Libc.fclose,
-        fdopen: Libc.fdopen,
-        fgets: Libc.fgets,
-        strchr: Libc.strchr,
-        strlen: Libc.strlen,
-        strcpy: Libc.strcpy,
-        strdup: Libc.strdup,
-        strtok_r: Libc.strtok_r,
-        strtoul: Libc.strtoul,
-        syscall: Libc.syscall,
-        dladdr: Libc.dladdr,
-        __cxa_demangle: Libc.__cxa_demangle,
-        getranges: new NativeCallback(() => ranges, 'pointer', []),
-    });
-    const _get_backtrace = new NativeFunction(cm.get_backtrace, 'pointer', ['pointer']);
-    const _addressOf = new NativeFunction(cm.addressOf, 'pointer', ['pointer']);
-    const _isFridaAddress = new NativeFunction(cm.isFridaAddress, 'bool', ['pointer']);
-    const _inRange = new NativeFunction(cm.inRange, 'bool', ['pointer']);
+  const rangesSize = Process.pointerSize * 2 * 512;
+  const ranges = Memory.alloc(rangesSize);
+  Memory.protect(ranges, rangesSize, 'rwx');
+  export const cm = new CModule(fbase64(_procmaps), {
+    frida_log: get_frida_log('procmaps'),
+    dl_soinfo_get_soname: new NativeCallback(
+      function (soinfo) {
+        return Memory.allocUtf8String('nya');
+      },
+      'pointer',
+      ['pointer'],
+    ),
+    dl_solist_get_head: LinkerSym['__dl__Z15solist_get_headv'],
+    sprintf: Libc.sprintf,
+    isprint: Libc.isprint,
+    close: Libc.close,
+    fclose: Libc.fclose,
+    fdopen: Libc.fdopen,
+    fgets: Libc.fgets,
+    strchr: Libc.strchr,
+    strlen: Libc.strlen,
+    strcpy: Libc.strcpy,
+    strdup: Libc.strdup,
+    strtok_r: Libc.strtok_r,
+    strtoul: Libc.strtoul,
+    syscall: Libc.syscall,
+    dladdr: Libc.dladdr,
+    __cxa_demangle: Libc.__cxa_demangle,
+    getranges: new NativeCallback(() => ranges, 'pointer', []),
+  });
+  const _get_backtrace = new NativeFunction(cm.get_backtrace, 'pointer', ['pointer']);
+  const _addressOf = new NativeFunction(cm.addressOf, 'pointer', ['pointer']);
+  const _isFridaAddress = new NativeFunction(cm.isFridaAddress, 'bool', ['pointer']);
+  const _inRange = new NativeFunction(cm.inRange, 'bool', ['pointer']);
 
-    export function backtraceOf(ptr: NativePointer): string {
-        return _get_backtrace(ptr).readCString() as string;
-    }
+  export function backtraceOf(ptr: NativePointer): string {
+    return _get_backtrace(ptr).readCString() as string;
+  }
 
-    export function addressOf(ptr: NativePointer): string {
-        return _addressOf(ptr).readCString() as string;
-    }
+  export function addressOf(ptr: NativePointer): string {
+    return _addressOf(ptr).readCString() as string;
+  }
 
-    export function isFridaAddress(ptr: NativePointer): boolean {
-        return _isFridaAddress(ptr) !== 0;
-    }
+  export function isFridaAddress(ptr: NativePointer): boolean {
+    return _isFridaAddress(ptr) !== 0;
+  }
 
-    export function printStacktrace(context?: CpuContext, tag?: string) {
-        const stack = Thread.backtrace(context, Backtracer.FUZZY);
-        let trace = '';
-        for (const ptr of stack) {
-            trace += `${this.addressOf(ptr)}\n\t`;
-        }
-        logger.info({ tag: tag ?? 'stack' }, trace);
+  export function printStacktrace(context?: CpuContext, tag?: string) {
+    const stack = Thread.backtrace(context, Backtracer.FUZZY);
+    let trace = '';
+    for (const ptr of stack) {
+      trace += `${this.addressOf(ptr)} ${DebugSymbol.fromAddress(ptr)} ${ElfHeader.resolve_address(ptr)}\n\t`;
     }
+    logger.info({ tag: tag ?? 'stack' }, trace);
+  }
 
-    export function addRange(range: { base: NativePointer; size: number }) {
-        const count = ranges.readU32();
-        const addr = ranges.add(4 + Process.pointerSize * 2 * count);
-        addr.writePointer(range.base);
-        addr.add(Process.pointerSize).writeU64(range.size);
-        ranges.writeU32(count + 1);
-        // console.log(hexdump(ranges));
-    }
+  export function addRange(range: { base: NativePointer; size: number }) {
+    try {
+      const count = ranges.readU32();
+      const addr = ranges.add(4 + Process.pointerSize * 2 * count);
+      addr.writePointer(range.base);
+      addr.add(Process.pointerSize).writeU64(range.size);
+      ranges.writeU32(count + 1);
+      logger.info({ tag: 'range' }, `${range.base}-${range.base.add(range.size)} #${count}`);
+    } catch (e) {}
+  }
 
-    export function inRange(ptr: NativePointer): boolean {
-        if (!ptr || ptr === NULL || `${ptr}` === '0x0') return false;
-        return _inRange(ptr) !== 0;
-    }
+  export function inRange(ptr: NativePointer): boolean {
+    if (!ptr || ptr === NULL || `${ptr}` === '0x0') return false;
+    return _inRange(ptr) !== 0;
+  }
+}
+
+// WIP: having memory access issues, but when it can read it resolves more than `addressOf` would
+namespace ElfHeader {
+  export const cm = new CModule(fbase64(_elfheader), {
+    frida_log: get_frida_log('procmaps'),
+    fopen: Libc.fopen,
+    sscanf: Libc.sscanf,
+    strstr: Libc.strstr,
+    malloc: Libc.malloc,
+    realloc: Libc.realloc,
+    strncpy: Libc.strncpy,
+    strrchr: Libc.strrchr,
+    fgets: Libc.fgets,
+    fclose: Libc.fclose,
+    calloc: Libc.calloc,
+    free: Libc.free,
+    addressOf: ProcMaps.cm.addressOf,
+    ensureReadable: new NativeCallback(
+      function (addr: NativePointer) {
+        const sec = Memory.queryProtection(addr);
+        const pages = Math.floor(Number(addr) / Process.pageSize);
+        const pagee = pages + Process.pageSize;
+        logger.info({ tag: 'ensurereadable' }, `addr: ${addr} page: ${ptr(pages)}-${ptr(pagee)}`);
+        return sec.includes('r') ? ptr(0x1) : ptr(0x0);
+      },
+      'pointer',
+      ['pointer'],
+    ),
+  });
+  const _resolve_address = new NativeFunction(cm.resolve_address, 'pointer', ['pointer']);
+
+  export function resolve_address(ptr: NativePointer) {
+    if (!ptr || ptr === NULL || `${ptr}` === '0x0') return null;
+    return _resolve_address(ptr)?.readCString() ?? null;
+  }
 }
 
 // namespace SvcHook {
@@ -166,23 +209,30 @@ namespace ProcMaps {
 // }
 
 const memcmp = callback(
-    new CModule(fbase64(_memcmp), {
-        frida_log: get_frida_log('memcmp'),
-        sprintf: Libc.sprintf,
-        isprint: Libc.isprint,
-        inRange: ProcMaps.cm.inRange,
-        addressOf: ProcMaps.cm.addressOf,
-    }),
+  new CModule(fbase64(_memcmp), {
+    frida_log: get_frida_log('memcmp'),
+    sprintf: Libc.sprintf,
+    isprint: Libc.isprint,
+    inRange: ProcMaps.cm.inRange,
+    addressOf: ProcMaps.cm.addressOf,
+  }),
 );
 
 const memmove = callback(
-    new CModule(fbase64(_memmove), {
-        frida_log: get_frida_log('memmove'),
-        sprintf: Libc.sprintf,
-        isprint: Libc.isprint,
-        inRange: ProcMaps.cm.inRange,
-        addressOf: ProcMaps.cm.addressOf,
-    }),
+  new CModule(fbase64(_memmove), {
+    frida_log: get_frida_log('memmove'),
+    sprintf: Libc.sprintf,
+    isprint: Libc.isprint,
+    inRange: ProcMaps.cm.inRange,
+    addressOf: ProcMaps.cm.addressOf,
+  }),
 );
 
-export { memcmp, memmove, ProcMaps, fbase64, LinkerSym };
+Object.defineProperties(globalThis, {
+  ElfHeader: {
+    value: ElfHeader,
+    writable: false,
+  },
+});
+
+export { memcmp, memmove, ElfHeader, ProcMaps, fbase64, LinkerSym };

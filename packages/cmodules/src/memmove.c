@@ -1,6 +1,7 @@
 #include <gum/guminterceptor.h>
 #include <stdio.h>
 typedef unsigned long long u64;
+typedef void *pthread_t;
 
 extern int sprintf(char *str, const char *format, ...);
 extern int isprint(int ch);
@@ -57,8 +58,10 @@ void onEnter(GumInvocationContext *ic) {
   char *a1 = gum_invocation_context_get_nth_argument(ic, 1);
   size_t a2 = GPOINTER_TO_SIZE(gum_invocation_context_get_nth_argument(ic, 2));
   void *retaddr = (void *)gum_invocation_context_get_return_address(ic);
+  guint threadId = gum_invocation_context_get_thread_id(ic);
   if (inRange(retaddr)) {
-    mklog("%p %p %d %s", a0, a1, a2, addressOf(retaddr));
+    mklog("%p %p %d %s \x1b[32m%d\x1b[0m", a0, a1, a2, addressOf(retaddr),
+          threadId);
     hex_dump(a1, a2 > 1000 ? 1000 : a2);
   } else {
     // mklog("%p %p %p", BASE, SIZE, retaddr);

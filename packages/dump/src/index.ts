@@ -6,21 +6,21 @@ export * from './soDump.js';
 export * from './inMemoryDexDump.js';
 
 function dumpExports(libname: string) {
-    const module = Process.findModuleByName(libname);
-    if (module) {
-        const exports = module.enumerateExports();
-        const text = JSON.stringify(exports, null, 2);
+  const module = Process.findModuleByName(libname);
+  if (module) {
+    const exports = module.enumerateExports();
+    const text = JSON.stringify(exports, null, 2);
 
-        //@ts-ignore
-        File.writeAllText(`${getSelfFiles()}/${libname}_exports.json`, text);
-    }
+    //@ts-ignore
+    File.writeAllText(`${getSelfFiles()}/${libname}_exports.json`, text);
+  }
 }
 
 Object.defineProperties(globalThis, {
-    dumpLib: {
-        value: dumpLib,
-        writable: false
-    }
-})
+  dumpLib: {
+    value: dumpLib,
+    writable: false,
+  },
+});
 
 export { dumpExports };

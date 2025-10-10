@@ -1,55 +1,57 @@
 {
-    "name": "frida-clockwork",
-    "version": "1.2.0",
-    "description": "Collection oof various frida toys",
-    "type": "module",
-    "scripts": {
-        "clean": "rm -rf packages/*/*.tsbuildinfo && rm -rf packages/*/dist && rm -rf node_modules/",
-        "prepublish": "npm run tsc",
-        "tsc": "npx tsc --build",
-        "webpack": "npx webpack --config webpack.config.js",
-        "watch:tsc": "npx tsc -b -w",
-        "watch:webpack": "npx webpack --config webpack.config.js --watch",
-        "attach": "run() { frida -U \"$1\" -l ./script.js -o ./session.txt; }; run",
-        "spawn": "run() { frida -U -f \"$1\" -l ./script.js -o ./session.txt ; }; run"
-    },
-    "keywords": [
-        "frida"
-    ],
-    "author": "Arsylk",
-    "license": "ISC",
-    "bugs": {
-        "url": "https://github.com/Arsylk/frida-clockwork/issues"
-    },
-    "homepage": "https://github.com/Arsylk/frida-clockwork",
-    "dependencies": {
-        "frida-compile": "latest",
-        "il2cpp-hooker": "^1.0.7",
-        "pako": "^2.1.0"
-    },
-    "devDependencies": {
-        "@biomejs/biome": "2.0.4",
-        "@types/frida-gum": "^19.0.0",
-        "copy-webpack-plugin": "^13.0.0",
-        "frida-il2cpp-bridge": "^0.11.0",
-        "frida-java-bridge": "^7.0.4",
-        "ts-loader": "^9.5.2",
-        "typescript": "^5.8.3",
-        "webpack": "^5.99.9",
-        "webpack-bundle-analyzer": "^4.10.2",
-        "webpack-cli": "^6.0.1"
-    },
-    "workspaces": [
-        "packages/logging",
-        "packages/common",
-        "packages/hooks",
-        "packages/network",
-        "packages/native",
-        "packages/jnitrace",
-        "packages/cocos2dx",
-        "packages/unity",
-        "packages/anticloak",
-        "packages/dump",
-        "packages/cmodules"
-    ]
+  "name": "frida-clockwork",
+  "version": "1.2.0",
+  "description": "Collection oof various frida toys",
+  "type": "module",
+  "scripts": {
+    "clean": "rm -rf packages/*/*.tsbuildinfo && rm -rf packages/*/dist && rm -rf node_modules/",
+    "prepublish": "npm run tsc",
+    "tsc": "npx tsc --build",
+    "webpack": "npx webpack --config webpack.config.js",
+    "watch:tsc": "npx tsc -b -w",
+    "watch:webpack": "npx webpack --config webpack.config.js --watch",
+    "attach": "run() { frida -U \"$1\" -l ./script.js -o ./session.txt; }; run",
+    "spawn": "run() { frida -U -f \"$1\" -l ./script.js -o ./session.txt ; }; run"
+  },
+  "keywords": [
+    "frida"
+  ],
+  "author": "Arsylk",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Arsylk/frida-clockwork/issues"
+  },
+  "homepage": "https://github.com/Arsylk/frida-clockwork",
+  "dependencies": {
+    "@frida/crypto": "^1.0.1",
+    "@frida/tty": "^1.0.0",
+    "@worksbutnottested/stalker-coverage": "github:WorksButNotTested/stalker-coverage",
+    "frida-compile": "latest",
+    "pako": "^2.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.2",
+    "@types/frida-gum": "^19.0.1",
+    "copy-webpack-plugin": "^13.0.1",
+    "frida-il2cpp-bridge": "^0.12.1",
+    "frida-java-bridge": "^7.0.8",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.2",
+    "webpack": "^5.101.3",
+    "webpack-bundle-analyzer": "^4.10.2",
+    "webpack-cli": "^6.0.1"
+  },
+  "workspaces": [
+    "packages/logging",
+    "packages/common",
+    "packages/hooks",
+    "packages/network",
+    "packages/native",
+    "packages/jnitrace",
+    "packages/cocos2dx",
+    "packages/unity",
+    "packages/anticloak",
+    "packages/dump",
+    "packages/cmodules"
+  ]
 }

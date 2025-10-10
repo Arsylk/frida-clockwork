@@ -4,7 +4,7 @@ import { LibcFinderProxy, type LibcType } from './define/libc.js';
 import { Linker, hookException } from './define/linker.js';
 import { enumerateMembers, findChoose, findClass, getFindUnique } from './search.js';
 import { SYSCALLS } from './define/syscalls.js';
-import type Java from 'frida-java-bridge';
+import Java from 'frida-java-bridge';
 import { stringify } from './text.js';
 import { logger } from '@clockwork/logging';
 export { SYSCALLS as Syscalls };
@@ -20,115 +20,142 @@ type Success<T> = [T, null];
 type Failure<E extends Error> = [null, E];
 
 function tryErr<T, E extends Error>(fn: () => T): Success<T> | Failure<E> {
-    try {
-        return [fn(), null] as Success<T>;
-    } catch (e: any) {
-        return [null, e] as Failure<E>;
-    }
+  try {
+    return [fn(), null] as Success<T>;
+  } catch (e: any) {
+    return [null, e] as Failure<E>;
+  }
 }
 
 function tryNull<T>(fn: () => T): T | null {
-    try {
-        return fn();
-    } catch (_) {}
-    return null;
+  try {
+    return fn();
+  } catch (_) {}
+  return null;
 }
 
 function isJWrapper(clazzOrName: Java.Wrapper | string): clazzOrName is Java.Wrapper {
-    return typeof clazzOrName === 'object' ? Reflect.has(clazzOrName, '$className') : false;
+  return typeof clazzOrName === 'object' ? Reflect.has(clazzOrName, '$className') : false;
 }
 
 function isIterable(obj: any) {
-    if (obj === null || obj === undefined) {
-        return false;
-    }
-    return typeof obj[Symbol.iterator] === 'function';
+  if (obj === null || obj === undefined) {
+    return false;
+  }
+  return typeof obj[Symbol.iterator] === 'function';
 }
 
 function stacktrace(e?: Java.Wrapper): string {
-    e ??= Classes.Exception.$new();
-    return Classes.Log.getStackTraceString(e).split('\n').slice(1).join('\n');
+  e ??= Classes.Exception.$new();
+  return Classes.Log.getStackTraceString(e).split('\n').slice(1).join('\n');
 }
 
 function stacktraceList(e?: Java.Wrapper): string[] {
-    e ??= Classes.Exception.$new();
-    const stack = Classes.Log.getStackTraceString(e);
-    return `${stack}`
-        .split('\n')
-        .slice(1)
-        .map((s: string) => s.substring(s.indexOf('at ') + 3).trim());
+  e ??= Classes.Exception.$new();
+  const stack = Classes.Log.getStackTraceString(e);
+  return `${stack}`
+    .split('\n')
+    .slice(1)
+    .map((s: string) => s.substring(s.indexOf('at ') + 3).trim());
+}
+
+function getApplication(): Java.Wrapper {
+  const app = Classes.ActivityThread.currentApplication();
+  const implClass = findClass(app.$className);
+  return implClass ? Java.cast(app, implClass) : app;
 }
 
 function getApplicationContext(): Java.Wrapper {
-    return Classes.ActivityThread.currentApplication().getApplicationContext();
+  return Classes.ActivityThread.currentApplication().getApplicationContext();
 }
 
 const isNully = (ptr: NativePointerValue) => !ptr || ptr === NULL || `${ptr}` === '0x0';
 
 const emitter = new EventEmitter();
 declare global {
-    const Classes: ClassesType;
-    const Libc: LibcType;
-    // biome-ignore lint/suspicious/noRedeclare: Makes the function accessible from global frida context
-    function findClass(className: string, ...loaders: Java.Wrapper[]): Java.Wrapper | null;
+  const Classes: ClassesType;
+  const Libc: LibcType;
+  // biome-ignore lint/suspicious/noRedeclare: Makes the function accessible from global frida context
+  function findClass(className: string, ...loaders: Java.Wrapper[]): Java.Wrapper | null;
 }
 Object.defineProperties(globalThis, {
-    Linker: {
-        value: Linker,
-        writable: false,
+  Linker: {
+    value: Linker,
+    writable: false,
+  },
+  Classes: {
+    value: ClassesProxy,
+    writable: false,
+  },
+  Libc: {
+    value: LibcFinderProxy,
+    writable: false,
+  },
+  findClass: {
+    value: findClass,
+  },
+  findChoose: {
+    value: findChoose,
+  },
+  tryNull: {
+    value: tryNull,
+  },
+  emitter: {
+    value: emitter,
+  },
+  application: {
+    get: () => getApplication(),
+  },
+  applicationContext: {
+    get: () => getApplicationContext(),
+  },
+  jniinit: {
+    value: (libname: string) => {
+      const module = Module.load(libname);
+      if (!module) return -1;
+      const jni = module.enumerateExports().filter((e) => e.name === 'JNI_OnLoad')?.[0];
+      if (!jni) return -1;
+      const fn = new NativeFunction(jni.address, 'int', ['pointer', 'pointer']);
+      const env = Java.vm.tryGetEnv()?.handle;
+      if (!env) return -1;
+      return fn(env, NULL);
     },
-    Classes: {
-        value: ClassesProxy,
-        writable: false,
-    },
-    Libc: {
-        value: LibcFinderProxy,
-        writable: false,
-    },
-    findClass: {
-        value: findClass,
-    },
-    findChoose: {
-        value: findChoose,
-    },
-    emitter: {
-        value: emitter,
-    },
+  },
 });
 
 // biome-ignore lint/complexity/useArrowFunction: don't
 rpc.exports.init = function (stage, params: object) {
-    const ent = Reflect.ownKeys(params).reduce<PropertyDescriptorMap>((prev, crnt) => {
-        const value = Reflect.get(params, crnt);
-        Reflect.set(prev, crnt, {
-            value: value,
-            writable: false,
-            configurable: false,
-            enumerable: isIterable(value),
-        } as PropertyDescriptor);
-        return prev;
-    }, {} as PropertyDescriptorMap);
-    Object.defineProperties(globalThis, ent);
-    logger.info({ tag: 'externalargs' }, stringify({ stage: stage, params: params, pid: Process.id }));
+  const ent = Reflect.ownKeys(params).reduce<PropertyDescriptorMap>((prev, crnt) => {
+    const value = Reflect.get(params, crnt);
+    Reflect.set(prev, crnt, {
+      value: value,
+      writable: false,
+      configurable: true,
+      enumerable: isIterable(value),
+    } as PropertyDescriptor);
+    return prev;
+  }, {} as PropertyDescriptorMap);
+  Object.defineProperties(globalThis, ent);
+  logger.info({ tag: 'externalargs' }, stringify({ stage: stage, params: params, pid: Process.id }));
 };
 
 export {
-    Linker,
-    ClassesProxy as Classes,
-    ClassesString,
-    emitter,
-    enumerateMembers,
-    findClass,
-    findChoose,
-    getApplicationContext,
-    getFindUnique,
-    isJWrapper,
-    isNully,
-    LibcFinderProxy as Libc,
-    stacktrace,
-    stacktraceList,
-    tryNull,
-    tryErr,
-    isIterable,
-    hookException,
+  Linker,
+  ClassesProxy as Classes,
+  ClassesString,
+  emitter,
+  enumerateMembers,
+  findClass,
+  findChoose,
+  getApplicationContext,
+  getFindUnique,
+  isJWrapper,
+  isNully,
+  LibcFinderProxy as Libc,
+  stacktrace,
+  stacktraceList,
+  tryNull,
+  tryErr,
+  isIterable,
+  hookException,
 };
