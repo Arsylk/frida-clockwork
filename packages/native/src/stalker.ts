@@ -119,5 +119,5 @@ function stalk(threadId: number, base: NativePointer) {
   });
 }
 
-const rfuncs =
+const rfuncs = {};
 export { stalk };
