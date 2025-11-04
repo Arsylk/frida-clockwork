@@ -531,7 +531,7 @@ function hookException(nums: number[], params: SyscallParams) {
       details.type === 'system' &&
       offset.readUInt() === 0xd4000001
     ) {
-      CM_lock(sysThread);
+      // CM_lock(sysThread);
       const num = (details.context as Arm64CpuContext).x8.toInt32();
       // store current registers
       const args: NativePointer[] = new Array(6);
@@ -556,7 +556,7 @@ function hookException(nums: number[], params: SyscallParams) {
       (details.context as Arm64CpuContext).x0 = retval;
       params?.onAfter?.call(thisCtx, details.context as Arm64CpuContext, num);
 
-      CM_unlock(sysThread);
+      // CM_unlock(sysThread);
       return true;
     }
     return false;

@@ -143,8 +143,17 @@ const Elf = {
     name_0x20: 'string*',
     array_0x28: 'pointer',
   }),
+  phdr: proxyStruct({
+    p_type: 'int',
+    p_flags: 'int',
+    p_offset: 'pointer',
+    p_vaddr: 'long',
+    p_paddr: 'long',
+    p_filesz: 'long',
+    p_memsz: 'long',
+    p_align: 'long',
+  }),
 };
-6;
 
 const Linker = {
   soinfo: proxyStruct({

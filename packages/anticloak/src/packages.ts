@@ -7,7 +7,7 @@ const ROOT_PACKAGES = [
   'com.termux',
   'com.termux.styling',
   'com.rifsxd.ksunext',
-  'bin.mt.plus',
+  '  bin.mt.plus',
 ];
 
 function hookPackageManager() {
@@ -26,7 +26,10 @@ function hookPackageManager() {
     //},
   };
   hook(Classes.ApplicationPackageManager, 'getPackageInfo', hookParams);
-  hook(Classes.ApplicationPackageManager, 'getApplicationInfo', hookParams);
+  hook(Classes.ApplicationPackageManager, 'getApplicationInfo', {
+    ...hookParams,
+    logging: { ...hookParams.logging, return: false, call: false },
+  });
 
   const listHookParams = (cast: Java.Wrapper) => {
     return {

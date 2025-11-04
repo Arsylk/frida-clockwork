@@ -71,7 +71,7 @@ Java.performNow(() => {
   hook(Classes.Class, 'getDeclaredFields', { logging: { call: false, return: false } });
   hook(Classes.Class, 'getDeclaredMethods', { logging: { call: false, return: false } });
 });
-JniTrace.attach((x) => ProcMaps.inRange(x.returnAddress), true);
+// JniTrace.attach((x) => ProcMaps.inRange(x.returnAddress), true);
 // JniTrace.barebone(
 //   (x) => ProcMaps.inRange(x.returnAddress),
 //   () => {},
@@ -93,7 +93,7 @@ Java.performNow(() => {
   Anticloak.hookNetwork();
   Anticloak.hookAdId(AD_ID);
   Anticloak.hookPackageManager();
-  Anticloak.Country.mock('VN');
+  Anticloak.Country.mock('US');
   Anticloak.InstallReferrer.replace({
     install_referrer: INSTALL_REFERRER,
   });
@@ -127,6 +127,7 @@ Java.performNow(() => {
     for (const str of ['getInt', 'getString', 'getBoolean']) {
       hook(cls, str, {
         replace: ifKey(function (arg) {
+          if (arg === 'Mont') return 'https://google.pl/search?q=hi';
           if (arg === 'status') return 0;
           if (arg === 'plugged') return 0;
           if (arg === 'userType') return 1;
@@ -152,9 +153,9 @@ Network.attachGetAddrInfo();
 //     logger.info({ tag: 'localcocos' }, `${kccxxxxxxxxxxxxxxxxey} -> ${this.fallback()}`);
 //     return undefined;
 // });
-// Unity.patchSsl();
-// Unity.attachScenes();
-// Unity.attachStrings();
+Unity.patchSsl();
+Unity.attachScenes();
+Unity.attachStrings();
 
 Native.log(Libc.mprotect, 'pii', {
   nolog: true,
@@ -197,6 +198,14 @@ Process.attachModuleObserver({
     if (name === 'l7e2f4a6e.so') return;
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size })}`);
     ProcMaps.addRange(module);
+    if (name === 'libapp.so') {
+      Native.log(DebugSymbol.fromName('AAssetManager_open').address, 'psi');
+      Native.log(DebugSymbol.fromName('AAssetManager_read').address, 'ppi');
+      Native.log(Libc.strcmp, 'ss', { predicate: ProcMaps.inRange });
+      Native.log(Libc.strchr, 'ss', { predicate: ProcMaps.inRange });
+      Native.log(Libc.strcat, 'ss', { predicate: ProcMaps.inRange });
+      Native.log(Libc.strlen, 's', { predicate: ProcMaps.inRange });
+    }
   },
 });
 Native.Files.hookRemove(() => true);

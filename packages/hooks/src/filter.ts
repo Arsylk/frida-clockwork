@@ -1,5 +1,5 @@
 import type Java from 'frida-java-bridge';
-import { ClassesString, stacktrace } from '@clockwork/common';
+import { ClassesString, stacktrace, stacktraceList } from '@clockwork/common';
 
 const prefsMeasurementInternalIgnored = [
   'consent_settings',
@@ -41,10 +41,20 @@ const Filter = {
   json: (_: any, ...args: any[]) => {
     let trace = stacktrace();
     trace = trace.substring(trace.indexOf('\n'));
-
     if (trace.includes('at org.json.JSONObject.<init>')) return false;
-    if (trace.includes('at org.json.JSONObject.get')) return false;
-    if (trace.includes('at org.json.JSONObject.opt')) return false;
+
+    if (trace.includes('at org.json.JSONObject.getString')) return false;
+    if (trace.includes('at org.json.JSONObject.getBoolean')) return false;
+    if (trace.includes('at org.json.JSONObject.getLong')) return false;
+    if (trace.includes('at org.json.JSONObject.getInt')) return false;
+    if (trace.includes('at org.json.JSONObject.getJSONObject')) return false;
+    if (trace.includes('at org.json.JSONObject.getJSONArray')) return false;
+    if (trace.includes('at org.json.JSONObject.optString')) return false;
+    if (trace.includes('at org.json.JSONObject.optBoolean')) return false;
+    if (trace.includes('at org.json.JSONObject.optLong')) return false;
+    if (trace.includes('at org.json.JSONObject.optInt')) return false;
+    if (trace.includes('at org.json.JSONObject.optJSONObject')) return false;
+    if (trace.includes('at org.json.JSONObject.optJSONArray')) return false;
     if (trace.includes('at com.facebook.internal.')) return false;
     if (trace.includes('at com.google.android.gms.internal.ads.')) return false;
     if (trace.includes('at com.google.android.gms.ads.internal.config.')) return false;
@@ -57,6 +67,8 @@ const Filter = {
     const trace = stacktrace();
     if (trace.includes('at com.yandex.mobile.ads.core.initializer.MobileAdsInitializeProvider.'))
       return false;
+    if (trace.includes(':com.google.android.gms.dynamite_measurementdynamite@')) return false;
+    if (trace.includes('at com.google.firebase.provider.FirebaseInitProvider.onCreate')) return false;
     if (trace.includes('at com.facebook.FacebookSdk.getLimitEventAndDataUsage')) return false;
     if (trace.includes('at com.facebook.internal.')) return false;
     if (trace.includes('at com.appsflyer.internal.')) return false;
@@ -104,6 +116,12 @@ const Filter = {
     if (trace.includes('at com.adjust.sdk.SdkClickHandler.sendSdkClick')) return false;
     if (trace.includes('at com.appsgeyser.sdk.ads.AdsLoader')) return false;
     // console.log(trace);
+    return true;
+  },
+  base64: () => {
+    let trace = stacktrace();
+    trace = trace.substring(trace.indexOf('\n'));
+    if (trace.includes('at android.util.Base64.decode')) return false;
     return true;
   },
   date: () => {
@@ -155,6 +173,7 @@ const Filter = {
       case 'guava.concurrent.generate_cancellation_cause':
         return false;
     }
+    if (key.startsWith('kotlinx.coroutines.')) return false;
     return true;
   },
   urlencoder: (_: any, ...args: any[]) => {
@@ -179,5 +198,23 @@ const FilterJni = {
     return true;
   },
 };
+
+function countIncludes(text: string, substring: string) {
+  if (substring.length === 0) {
+    return 0;
+  }
+
+  let count = 0;
+  let startIndex = 0;
+  let foundIndex = -1;
+
+  while ((foundIndex = text.indexOf(substring, startIndex)) !== -1) {
+    count += 1;
+    startIndex = foundIndex + substring.length;
+  }
+
+  console.log(substring, text, count);
+  return count;
+}
 
 export { Filter, FilterJni };

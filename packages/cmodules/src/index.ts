@@ -112,7 +112,7 @@ namespace ProcMaps {
     const stack = Thread.backtrace(context, Backtracer.FUZZY);
     let trace = '';
     for (const ptr of stack) {
-      trace += `${this.addressOf(ptr)} ${DebugSymbol.fromAddress(ptr)} ${ElfHeader.resolve_address(ptr)}\n\t`;
+      trace += `${this.addressOf(ptr)} ${DebugSymbol.fromAddress(ptr)}\n\t`;
     }
     logger.info({ tag: tag ?? 'stack' }, trace);
   }

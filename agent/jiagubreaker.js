@@ -22,10 +22,34 @@ function getEnumerated(module, symbol) {
   return NULL;
 }
 
+function tryOrNull(fn) {
+  try {
+    return fn();
+  } catch (_) {}
+  return null;
+}
+
+function hardBreakPoint(ptr, fn) {
+  let called = false;
+  const prot = Memory.queryProtection(ptr);
+  Process.setExceptionHandler(function (ex) {
+    console.log(
+      Thread.backtrace(ex.context, Backtracer.FUZZY).join("\t\n"),
+      "hardbrk"
+    );
+    // logger.info({ tag: 'hardbrk' }, `${ptr}\n    ${trace}`);
+    fn();
+    Memory.protect(ptr, Process.pointerSize, prot);
+    if (!called) return (called = true);
+  });
+  Memory.protect(ptr, Process.pointerSize, "---");
+}
+
 const ranges = new Array();
 let found = false;
 const mprots = new Array();
 const dexes = new Map();
+const ents = new Array();
 
 const libart = Process.getModuleByName("libart.so");
 const linker64 = Process.getModuleByName("linker64");
@@ -97,6 +121,78 @@ Process.attachModuleObserver({
     }
     if (name.includes("libjiagu") || name.includes("l02e9294c")) {
       ranges.push({ base: base, size: size });
+
+      const getEnumeratedAll = (module, fn) => {
+        const b = [];
+        for (const ex of module.enumerateExports()) {
+          if (fn(ex)) {
+            b.push(ex);
+          }
+        }
+        return b;
+      };
+      ents.push(
+        ...getEnumeratedAll(
+          module,
+          ({ name }) =>
+            (name !== "_ULaarch64_local_addr_space" &&
+              name.includes("aarch64")) ||
+            name.includes("interpreter")
+        )
+      );
+
+      let uq = 0;
+      for (const ent of ents) {
+        const { address: addr, name } = ent;
+        try {
+          Interceptor.attach(addr, {
+            onEnter(args) {
+              const getAt = (i) =>
+                tryOrNull(() =>
+                  args[i].sub(base) >= 0 && args[i].sub(base) <= size
+                    ? args[i].sub(base)
+                    : args[i]
+                );
+              console.log(
+                `[${name}]:${(this.uq = ++uq)} call(${getAt(0)}, ${getAt(
+                  1
+                )}, ${getAt(2)}, ${getAt(3)})`,
+                `${this.returnAddress.sub(base)}`
+              );
+            },
+            onLeave(retval) {
+              console.log(
+                `[${name}]:${this.uq} return`,
+                `${this.returnAddress.sub(base)}`
+              );
+            },
+          });
+          // console.log(`${addr} ${name} OK`);
+        } catch (e) {
+          // console.log(`${addr} ${name} ${e}`);
+        }
+      }
+      Interceptor.attach(base.add(0xc6f8), {
+        onEnter(args) {
+          this.sym = args[1].readCString();
+        },
+        onLeave(retval) {
+          console.log("[dlsym_mk3]", `${this.sym} ? ${retval.sub(base)}`);
+        },
+      });
+
+      Interceptor.attach(base.add(0x11564), {
+        onEnter(args) {
+          console.log(
+            "[maps_mk2]",
+            `${base.add(0x2bf47c).readPointer()} ? ${this.returnAddress.sub(
+              base
+            )}`
+          );
+        },
+        onLeave(retval) {},
+      });
+
       // Interceptor.attach(
       //   getEnumerated(module, "interpreter_wrap_int64_t_bridge"),
       //   {
@@ -152,7 +248,6 @@ function hookmore(name) {
           const op = inst.operands[0];
           const f = ptr(`${op.value}`);
           console.log("[memfound]", `${inst.address} ${inst} ${f}`);
-          let i = 4;
           Interceptor.attach(f, {
             onEnter(args) {
               this.handle = args[0];

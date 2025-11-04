@@ -1,4 +1,5 @@
 import { ElfHeader, LinkerSym, memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
+import * as Unity from '@clockwork/unity';
 
 import { ClassLoader, Filter, always, compat, findHook, getHookUnique, hook, ifKey } from '@clockwork/hooks';
 import {
@@ -61,66 +62,9 @@ const uniqEnum = (clazzName: string, depth?: number) => {
     );
   });
 };
-injectNative();
-injectSsl();
-ClassLoader.perform(() => {
-  uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
-  uniqHook(ClassesString.DexPathList, '$init', {
-    logging: { short: true, multiline: false },
-  });
-});
-mock('BR');
-Java.performNow(() => {
-  for (const cls of [Classes.SharedPreferencesImpl, Classes.Bundle]) {
-    for (const str of ['getInt', 'getString', 'getBoolean']) {
-      hook(cls, str, {
-        replace: ifKey(function (arg) {
-          if (arg === 'oqNmdODwT1HuJh') return 'nya';
-        }),
-      });
-    }
-  }
-});
 
 const libc = Process.getModuleByName('libc.so');
-log(libc.getExportByName('mprotect'), 'pi2', {
-  predicate: ProcMaps.inRange,
-  transform: { 2: Consts.prot },
-  call(args) {
-    this.base = args[0];
-    this.size = args[1].toInt32();
-  },
-  ret(retval) {
-    const range = { base: this.base, size: this.size };
-    mprots.push(range);
-    ProcMaps.addRange(range);
-  },
-});
 const libdl = Process.getModuleByName('libdl.so');
-log(libdl.getExportByName('dlopen'), 'si', {
-  call(args) {
-    const name = args[0].readCString();
-    this.name = name;
-  },
-  ret(retval) {
-    const name = this.name;
-    if (name) {
-      if (!found) {
-        // hookmore(name);
-      }
-    }
-  },
-});
-
-let found = false;
-const mprots = new Array<{ base: NativePointer; size: number }>();
-const addrs = new Set<string>();
-const dl_iter_cb = new Set<string>();
-const dexes = new Map<string, number>();
-
-const libart = Process.getModuleByName('libart.so');
-const linker = Process.getModuleByName('linker64');
-
 log(libdl.getExportByName('dl_iterate_phdr'), 'pp', {
   predicate: ProcMaps.inRange,
   call(args) {
@@ -267,18 +211,18 @@ log(libc.getExportByName('strcmp'), 'ssu', {
 log(libc.getExportByName('strstr'), 'ss', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('strlen'), 's', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('strdup'), 's', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('syscall'), 'i', {
-  predicate: ProcMaps.inRange,
-  call(args) {
-    if (args[0].toInt32() === 56) {
-      const path = args[1].readCString();
-      logger.info({ tag: 'syscall' }, `${path}`);
-      if (path === '/proc/self/task') {
-        // args[1] = Memory.allocUtf8String('/dev/null');
-      }
-    }
-  },
-});
+// log(libc.getExportByName('syscall'), 'i', {
+//   predicate: ProcMaps.inRange,
+//   call(args) {
+//     if (args[0].toInt32() === 56) {
+//       const path = args[1].readCString();
+//       logger.info({ tag: 'syscall' }, `${path}`);
+//       if (path === '/proc/self/task') {
+//         // args[1] = Memory.allocUtf8String('/dev/null');
+//       }
+//     }
+//   },
+// });
 log(libc.getExportByName('prctl'), 'pp', { predicate: ProcMaps.inRange });
 
 log(libc.getExportByName('fork'), '', { predicate: ProcMaps.inRange });
@@ -298,43 +242,43 @@ log(libc.getExportByName('access'), 's', {
     // }
   },
 });
-log(libc.getExportByName('fopen'), 'si', {
-  predicate: ProcMaps.inRange,
-  call(args) {
-    ProcMaps.printStacktrace(this.context);
-    const path = args[0].readCString();
-    if (path?.includes('/maps')) {
-      // args[0] = Memory.allocUtf8String('/dev/null');
-    }
-    if (path.endsWith('/libc.so')) {
-      // const newpath = `${getSelfFiles()}/fakelibc.so`;
-      // const bytesto = libc.base.readByteArray(libc.size);
-      // File.writeAllBytes(newpath, bytesto);
-      // args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
-    }
-    // if (args[0].readCString()?.includes('/cmdline')) {
-    //   args[0] = Memory.allocUtf8String('/dev/null');
-    // }
-    // if (args[0].readCString()?.includes('/libc.so')) {
-    //   args[0] = Memory.allocUtf8String('/dev/null');
-    // }
-  },
-});
-log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('open64'), 'si', {
-  predicate: ProcMaps.inRange,
-});
-log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('sigfillset'), 'pp', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('setpgid'), 'pp', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('lseek'), '0p2', {
-  predicate: ProcMaps.inRange,
-  transform: {
-    0: (ptr) => readFdPath(ptr.toInt32()),
-    2: (ptr) => Consts.whence[ptr.toInt32()],
-  },
-});
+// log(libc.getExportByName('fopen'), 'si', {
+// predicate: ProcMaps.inRange,
+// call(args) {
+// ProcMaps.printStacktrace(this.context);
+// const path = args[0].readCString();
+// if (path?.includes('/maps')) {
+// args[0] = Memory.allocUtf8String('/dev/null');
+// }
+// if (path.endsWith('/libc.so')) {
+// const newpath = `${getSelfFiles()}/fakelibc.so`;
+// const bytesto = libc.base.readByteArray(libc.size);
+// File.writeAllBytes(newpath, bytesto);
+// args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
+// }
+// if (args[0].readCString()?.includes('/cmdline')) {
+//   args[0] = Memory.allocUtf8String('/dev/null');
+// }
+// if (args[0].readCString()?.includes('/libc.so')) {
+//   args[0] = Memory.allocUtf8String('/dev/null');
+// }
+// },
+// });
+// log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('open64'), 'si', {
+//   predicate: ProcMaps.inRange,
+// });
+// log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('sigfillset'), 'pp', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('setpgid'), 'pp', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('lseek'), '0p2', {
+//   predicate: ProcMaps.inRange,
+//   transform: {
+//     0: (ptr) => readFdPath(ptr.toInt32()),
+//     2: (ptr) => Consts.whence[ptr.toInt32()],
+//   },
+// });
 // log(libc.getExportByName('read'), '0pi', {
 //   predicate: ProcMaps.inRange,
 //   call(args) {
@@ -374,11 +318,76 @@ log(libc.getExportByName('lseek'), '0p2', {
 // TheEnd.hook();
 // Interceptor.attach(Libc.memmove, memmove);
 // Interceptor.attach(Libc.memcmp, memcmp);
-attach((x) => ProcMaps.inRange(x.returnAddress), true);
-// hookArtDexFile();
+
+// injectNative();
+// injectSsl();
+// ClassLoader.perform(() => {
+//   uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
+//   uniqHook(ClassesString.DexPathList, '$init', {
+//     logging: { short: true, multiline: false },
+//   });
+// });
+mock('BR');
+// Java.performNow(() => {
+//   for (const cls of [Classes.SharedPreferencesImpl, Classes.Bundle]) {
+//     for (const str of ['getInt', 'getString', 'getBoolean']) {
+//       console.log('ninti', str);
+//       hook(cls, str, {
+//         replace: ifKey(function (arg) {
+//           if (`${arg}`.includes('aaaaaa')) {
+//             console.log('pass');
+//             return '%7B%22nIAy%2o2%3A%22mhhgn%22%2C%22iznoaTttP%22%3A%22%22%2C%22IxZtJ%22%3A%22kuiviO%22%2C%22kCPtFvZp%22%3A1%7D';
+//           }
+//         }),
+//       });
+//     }
+//   }
+// });
+
+log(libc.getExportByName('mprotect'), 'pi2', {
+  nolog: true,
+  predicate: ProcMaps.inRange,
+  transform: { 2: Consts.prot },
+  call(args) {
+    this.base = args[0];
+    this.size = args[1].toInt32();
+  },
+  ret(retval) {
+    if (this.arg2 & 4) {
+      const range = { base: this.base, size: this.size };
+      mprots.push(range);
+      ProcMaps.addRange(range);
+    }
+  },
+});
+log(libdl.getExportByName('dlopen'), 'si', {
+  call(args) {
+    const name = args[0].readCString();
+    this.name = name;
+  },
+  ret(retval) {
+    const name = this.name;
+    if (name) {
+      if (!found) {
+        // hookmore(name);
+      }
+    }
+  },
+});
+
+let found = false;
+const mprots = new Array<{ base: NativePointer; size: number }>();
+const addrs = new Set<string>();
+const dl_iter_cb = new Set<string>();
+const dexes = new Map<string, number>();
+
+const libart = Process.getModuleByName('libart.so');
+const linker = Process.getModuleByName('linker64');
+
 Process.attachModuleObserver({
   onAdded(module) {
     const { base, name, size, path } = module;
+
     if (
       !path.includes(Reflect.get(globalThis, 'packageName')) ||
       name === 'libmonochrome_64.so' ||
@@ -406,7 +415,7 @@ Process.attachModuleObserver({
     }
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size, path: path })}`);
     ProcMaps.addRange(module);
-    if (name.includes('libtodefy.so')) {
+    if (name.includes('libtaietwl.so')) {
       Interceptor.attach(getEnumerated(module, 'JNI_OnLoad'), {
         onEnter(args) {
           Interceptor.detachAll();
@@ -414,17 +423,19 @@ Process.attachModuleObserver({
         },
       });
       return;
+
+      log(base.add(0xe8c8), '', { tag: '__start_routine' });
       log(base.add(0x11d6c), 'pp');
       log(base.add(0xd07c), 'pp', { tag: 'set_phdr_protections' });
       log(base.add(0x363d4), 'pp', { tag: 'apply_relocs_and_search_deps' });
-      log(base.add(0xa890), 'pp', {
-        tag: 'exec_encoded_function_calls',
-        call(args) {
-          const size = args[1].toInt32();
-          const int64s = new Uint8Array(args[0].readByteArray(size));
-          console.log(int64s.join(', '));
-        },
-      });
+      // log(base.add(0xa890), 'pp', {
+      //   tag: 'exec_encoded_function_calls',
+      //   call(args) {
+      //     const size = args[1].toInt32();
+      //     const int64s = new Uint8Array(args[0].readByteArray(size));
+      //     console.log(int64s.join(', '));
+      //   },
+      // });
       log(base.add(0xd378), 'pp', {
         tag: 'decrypt_and_assign',
         ret(retval) {
@@ -449,18 +460,37 @@ Process.attachModuleObserver({
       log(base.add(0xb6d8), 'pp', {
         tag: 'parse_and_load_dynamic_sectioin',
         call(args) {
+          const path = args[0].add(0x58).readCString();
           const base = args[0].add(0x190).readPointer();
           const dyn = args[0].add(0x100).readPointer();
-          const diff = Number(base.sub(module.base));
-          logger.info({ tag: 'diff' }, `${diff}`);
-          logger.info({ tag: 'dynamic' }, hexdump(base));
-          logger.info({ tag: 'dyn' }, hexdump(dyn));
+          const phdr = args[0].add(0xe8).readPointer();
+          const phdr_count = Number(args[0].add(0xf8).readLong());
 
-          const file = `${getSelfFiles()}/base_${base}`;
-          logger.info({ tag: 'writetofile' }, file);
-          File.writeAllBytes(file, base.readByteArray(module.size - diff));
+          const diff = Number(base.sub(module.base));
+          logger.info({ tag: 'diff' }, `${path} ${diff}`);
+          logger.info({ tag: 'dynamic' }, hexdump(base));
+
+          for (let i = 0; i < phdr_count; i += 1) {
+            const phdrr = phdr.add(i * 0x38);
+            const p_ = Struct.Elf.phdr(phdrr);
+            logger.info({ tag: 'phdr' }, `${i} ${Text.stringify(Struct.toObject(p_))}`);
+          }
+
+          let dc = 0;
+          while (true) {
+            const dynn = dyn.add(dc++ * 0x10);
+            const d_tag = Number(dynn.readS64());
+            const d_un = dynn.add(0x8).readPointer();
+            logger.info({ tag: 'dyn' }, `d_tag: ${Consts.d_tag(d_tag)} d_un: ${d_un}`);
+            if (d_tag === 0x0) break;
+          }
+          // const file = `${getSelfFiles()}/base_${base}`;
+          // logger.info({ tag: 'writetofile' }, file);
+          // File.writeAllBytes(file, base.readByteArray(module.size - diff));
         },
       });
+      log(base.add(0xd660), 'pppp', { tag: 'find_dynamic_phdr' });
+      log(base.add(0xd790), 'pph');
     }
   },
 });
@@ -610,19 +640,24 @@ function hooksyscall() {
   });
 }
 
-function runme(offset: number, count = 322) {
+function runme(offset, count = 322) {
   const { base } = Process.getModuleByName('libjiagu.so');
+  console.log(base);
   const map = {};
   for (let i = 0; i < count; i += 1) {
     const at = offset + 0x8 * i;
-    const value = tryNull(() => base.add(at).readPointer());
+    let value = null;
+    try {
+      //tufgapuzzleballspower.space/
+      https: value = base.add(at).readPointer();
+    } catch {}
+    console.log(value);
     const info = DebugSymbol.fromAddress(value);
-    // logger.info({ tag: 'runme', id: base.add(at) }, `${value} ${info}`);
     if (info.name && info.moduleName !== 'libjiagu.so') {
       map[`${at}`] = [info.name, info.moduleName];
     }
   }
-  logger.info({ tag: 'runme' }, JSON.stringify(map));
+  console.log(JSON.stringify(map));
 }
 Object.defineProperty(globalThis, 'runme', runme);
 rpc.exports.runme = runme;
@@ -640,7 +675,14 @@ rpc.exports.runme = runme;
 //     },
 //   },
 //   call(args) {
-//     this.soinfo = new SoInfo(args[0]);
+//     const soinfo = (this.soinfo = new SoInfo(args[0]));
 //   },
 //   ret(retval) {},
 // });
+
+// Unity.setVersion('6000.0.31f1');
+// Unity.patchSsl();
+// Unity.attachScenes();
+// Unity.attachStrings();
+
+ClassLoader.perform(() => {});

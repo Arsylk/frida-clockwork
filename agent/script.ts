@@ -20,8 +20,10 @@ import {
   getFindUnique,
   hookException,
   isNully,
+  jarrayToBuffer,
   stacktrace,
   tryNull,
+  vs,
 } from '@clockwork/common';
 import { dumpLib, dexBytesVerify, hookInMemoryDexDump, initSoDump } from '@clockwork/dump';
 import { ClassLoader, Filter, always, compat, findHook, getHookUnique, hook, ifKey } from '@clockwork/hooks';
@@ -175,6 +177,22 @@ function hookNetwork() {
       logger.info({ tag: 'read' }, pink(stacktrace()));
     },
   });
+
+  hook(Classes.DatagramSocket, 'send', {
+    logging: {
+      multiline: false,
+      transform: (value, type, id) =>
+        id === 0 ? tryNull(() => [[Text.ba2hex(value.buf.value)], `${ClassesString.Object}[]`]) : value,
+    },
+  });
+
+  hook(Classes.DatagramSocket, 'receive', {
+    logging: {
+      multiline: false,
+      transform: (value, type, id) =>
+        id === 0 ? tryNull(() => [[Text.ba2hex(value.buf.value)], `${ClassesString.Object}[]`]) : value,
+    },
+  });
 }
 
 function hookFile() {
@@ -205,46 +223,51 @@ function hookFile() {
 function hookRuntimeExec() {
   const mReplace = (arg: string) => {
     let sArg = arg;
-    // sArg = sArg.replace(/su$/g, 'echo');
-    sArg = sArg.replace(/^rm /g, 'file ');
-    // sArg = sArg.replace(/^getprop/g, 'echo');
-    // sArg = sArg.replace(/^mount/g, 'echo');
+    // sArg = sArg.replace(/su$/g, 'nya');
+    // sArg = sArg.replace(/^rm /g, 'file ');
+    // sArg = sArg.replace(/^getprop/g, 'echo nya');
+    // sArg = sArg.replace(/^mount/g, 'echo nya');
+    // sArg = sArg.replace(/^sh/g, 'echo nya');
     // sArg = sArg.replace(/^uname/g, 'echo');
     return Classes.String.$new(`${sArg}`);
   };
 
-  hook(Classes.Runtime, 'exec', {
-    replace(method, ...args) {
-      // string array
-      if (method.argumentTypes[0].name === '[Ljava/lang/String;') {
-        const cloned = Array(args[0].length);
-        for (let i = 0; i < args[0].length; i += 1) {
-          cloned[i] = mReplace(`${args[0][i]}`);
-        }
-        args[0] = Java.array(ClassesString.String, cloned);
-      }
-      // single string
-      else {
-        if (args[0] === 'su') {
-          throw Classes.IOException.$new();
-        }
-        // this apparnetly is not consistent with actual exec()
-        args[0] = mReplace(`${args[0]}`);
-      }
-      logger.info({ tag: 'process' }, `${args[0]}`);
-      // if (`${args[0]}`.includes('nya') === false) return Classes.Runtime.exec.call(this, 'echo nya');
-      return method.call(this, ...args);
-    },
-  });
+  // hook(Classes.Runtime, 'exec', {
+  //   replace(method, ...args) {
+  //     // string array
+  //     if (method.argumentTypes[0].name === '[Ljava/lang/String;') {
+  //       const cloned = Array(args[0].length);
+  //       for (let i = 0; i < args[0].length; i += 1) {
+  //         cloned[i] = mReplace(`${args[0][i]}`);
+  //       }
+  //       args[0] = Java.array(ClassesString.String, cloned);
+  //     }
+  //     // single string
+  //     else {
+  //       if (args[0] === 'su') {
+  //         throw Classes.IOException.$new();
+  //       }
+  //       // this apparnetly is not consistent with actual exec()
+  //       args[0] = mReplace(`${args[0]}`);
+  //     }
+  //     logger.info({ tag: 'process' }, `${args[0]}`);
+  //     // if (`${args[0]}`.includes('nya') === false) return Classes.Runtime.exec.call(this, 'echo nya');
+  //     return method.call(this, ...args);
+  //   },
+  // });
   hook(Classes.ProcessBuilder, 'start', {
     before(method, ...args) {
       const newlist: string[] = [];
-      for (let i = 0; i < this._command.value.size(); i += 1) {
-        const newvalue = mReplace(`${this._command.value.get(i)}`);
-        this._command.value.set(i, newvalue);
-        newlist.push(newvalue);
+      const command = this.command();
+      for (const cmdpart of command.toArray()) {
+        if (`${cmdpart}` === 'su') {
+          console.log('nyanya');
+          throw Classes.IOException.$new();
+        }
+        newlist.push(mReplace(cmdpart));
       }
-      logger.info({ tag: 'process' }, `${newlist}`);
+      logger.info({ tag: 'process' }, `${newlist} ${pink(stacktrace())}`);
+      this.command(...args);
     },
   });
 }
@@ -255,17 +278,7 @@ function hookCrypto() {
       multiline: false,
       short: true,
       transform: (value, type, id) =>
-        (id === 0 || undefined) &&
-        tryNull(() => [
-          (() => {
-            let sb = '';
-            for (const b of value) {
-              sb += Text.toHex(b);
-            }
-            return [sb];
-          })(),
-          `${ClassesString.Object}[]`,
-        ]),
+        (id === 0 || undefined) && tryNull(() => [[Text.ba2hex(value)], `${ClassesString.Object}[]`]),
     },
   });
   hook(Classes.Cipher, 'getInstance', {
@@ -302,7 +315,7 @@ function hookCrypto() {
         //   console.log(e);
         // }
 
-        // logger.info({ tag: 'decrypt' }, pink(stacktrace()));
+        logger.info({ tag: 'decrypt' }, pink(stacktrace()));
       }
     },
     logging: { arguments: false, return: false },
@@ -310,7 +323,7 @@ function hookCrypto() {
 }
 
 function hookJson(fn?: (key: string, method: string, fallback: () => Java.Wrapper) => any) {
-  const logging = { multiline: false, short: true, call: false, return: false };
+  const logging = { multiline: false, short: true };
   const getOpt = ['get', 'opt'];
   const types = ['Boolean', 'Double', 'Int', 'JSONArray', 'JSONObject', 'Long', 'String'];
   hook(Classes.JSONObject, '$init', {
@@ -637,6 +650,8 @@ Java.performNow(() => {
       case 'gaidM':
       case 'gmp_app_id':
       case 'UP_ID':
+      case 'AD_CHANNEL':
+      case 'AD_GROUP_ID':
         return AD_ID;
       case 'is_logged_in':
         if (one) return (one = false);
@@ -649,11 +664,13 @@ Java.performNow(() => {
         return false;
       case 'containsReferrerKey':
       case 'tenjinGoogleInstallContainsRbaivieteferrerKey':
-        return true;
+        return false;
+      case 'tLxueOQBY':
+        return C4_URL;
     }
   });
   let one = false;
-  hook(Classes.SharedPreferencesImpl$EditorImpl, 'putString');
+  hook(Classes.SharedPreferencesImpl$EditorImpl, 'putString', {});
   hookPreferences(() => {});
   hookFirestore();
   hook(Classes.Intent, 'getExtras', {
@@ -712,9 +729,9 @@ Java.performNow(() => {
   Anticloak.hookAdId(AD_ID);
   Anticloak.hookPackageManager();
   Anticloak.Country.mock(LOCALE);
-  Anticloak.InstallReferrer.replace({
-    install_referrer: INSTALL_REFERRER,
-  });
+  // Anticloak.InstallReferrer.replace({
+  //   install_referrer: INSTALL_REFERRER,
+  // });
 
   hook(Classes.SystemProperties, 'get', {
     loggingPredicate: Filter.systemproperties,
@@ -752,20 +769,23 @@ Java.performNow(() => {
   //   loggingPredicate: Filter.urlencoder,
   // });
   // hook(Classes.Method, 'invoke', {
-  //     logging: {
-  //         transform(value, type, id) {
-  //             if (id === 1) {
-  //                 logger.info({ tag: 'reflect', id: `${Text.toPrettyType(type)}` }, `${value}`);
-  //                 return value?.[0];
-  //             }
-  //             return undefined;
-  //         },
-  //     }
-  //     after(method, returnValue, ...args) {
-  //         // logger.info({ tag: 'stack' }, `${this}`);
-  //         // logger.info({ tag: 'stack' }, pink(stacktrace()));
+  //   logging: {
+  //     transform(value, type, id) {
+  //       if (id === 1) {
+  //         return value?.[0];
+  //       }
+  //       return undefined;
   //     },
+  //   },
+  //   after(method, returnValue, ...args) {
+  //     logger.info(
+  //       { tag: 'reflect' },
+  //       `${this.getDeclaringClass().getName()}::${this.getName()}(${vs(args[1], `${ClassesString.Object}[]`)}): ${returnValue}`,
+  //     );
+  //     // logger.info({ tag: 'stack' }, pink(stacktrace()));
+  //   },
   // });
+  // hook(Classes.Class, 'getDeclaredMethod', { logging: { multiline: false }, predicate: (_, i) => i === 0 });
 
   hook(Classes.Log, 'd', {
     loggingPredicate: () => false,
@@ -791,10 +811,25 @@ Java.performNow(() => {
     logging: { short: true, multiline: false },
   });
   hook(Classes.Thread, 'getStackTrace', {
-    replace: always([]),
+    // replace: always([]),
     loggingPredicate: Filter.stacktrace,
     logging: { short: true, multiline: false },
   });
+
+  hook('android.util.Base64', 'decode', {
+    loggingPredicate: Filter.base64,
+    logging: { short: true, multiline: false, call: false, return: false },
+    after(method, returnValue, ...args) {
+      let sb = BigInt(0);
+      const st = stacktrace();
+      for (let i = 0; i < st.length; i += 1) {
+        sb += BigInt(st.codePointAt(i) ?? 0);
+      }
+      File.writeAllBytes(`${Native.getSelfFiles()}/dec_${sb}`, jarrayToBuffer(returnValue));
+    },
+  });
+
+  const pp = 'com.applovin.sdk.AppLovinInitProvider';
 });
 
 ClassLoader.perform(() => {});
@@ -813,7 +848,7 @@ Process.attachModuleObserver({
       name === 'libandroid.so' ||
       name === 'libil2cpp.so' ||
       name === 'libmmkv.so' ||
-      // name === 'libflutter.so' ||
+      name === 'libflutter.so' ||
       name === 'libsigner.so' ||
       name === 'libcocos2djs.so' ||
       name === 'ibdB2CB406F37A3.so' ||
@@ -823,7 +858,7 @@ Process.attachModuleObserver({
       name === 'libd79E1FB729E42.so' ||
       name === 'libd586F624C883B.so' ||
       name === 'libd882B40CF4232.so' ||
-      name === 'libd449AB3ABD7AA.so'
+      name === 'libdE9CCDAF38955.so'
     )
       return;
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size, path: path })}`);
@@ -837,10 +872,11 @@ Native.log(Libc.mprotect, 'pi2', {
   call(args) {
     this.base = args[0];
     this.size = args[1].toInt32();
+    this.prot = args[2].toInt32();
   },
   ret(retval) {
     const range = { base: this.base, size: this.size };
-    ProcMaps.addRange(range);
+    if (this.prot & 4) ProcMaps.addRange(range);
   },
 });
 
@@ -860,8 +896,8 @@ Native.attachSystemPropertyGet(
     return value;
   },
 );
-// // Native.log(Libc.open, 'pi', { predicate: ProcMaps.inRange });
-// // Native.log(Libc.openat, 'ipi', { predicate: ProcMaps.inRange });
+Native.log(Libc.open, 'si', { predicate: ProcMaps.inRange });
+Native.log(Libc.openat, 'isi', { predicate: ProcMaps.inRange });
 // Native.log(Libc.syscall, 'i', { predicate: ProcMaps.inRange });
 // let runmeat = 0;
 // Native.log(LinkerSym.__dl__Z9do_dlopenPKciPK17android_dlextinfoPKv, 's', {
@@ -901,16 +937,11 @@ Native.attachSystemPropertyGet(
 // });
 
 // Cocos2dx.replace(ptr(0x007ecaf4), 'libcocos2djs.so');
-// Cocos2dx.dump({ name: 0x00ced738) });
-// Cocos2dx.hookLocalStorage(function (key) {
-//   logger.info({ tag: 'cocossetlocal' }, `${key} -> ${this.fallback()}`);
-//   if (key === 'xlioiei') return 'https://google.pl/search?q=hi';
-//   // if (key === 'IS_HUB_LIST_GAME') return '1';
-//   if (key === 'USER') return 'Arsylk';
-//   if (key === 'PASS') return 'nya';
-//   if (key === 'STORAGE_KEY')
-//     return `{"H2AData":[null,0,3,2,5,4,1],"curItemType":null,"items":[{"type":"Key","status":"Scene"},{"type":"Mail","status":"Enable"}],"isSelect":true,"mailboxStatus":"Pengind","grandmoStatus":"Enabled","grandmoDialogIndex":2,"doorStatus":"Opened","curScene":"H2"}`;
-// });
+// Cocos2dx.dump({ name: 'libcocos2djs.so', fn_dump: ptr(0x0079cb08), fn_key: ptr(0x00696830) });
+Cocos2dx.hookLocalStorage(function (key) {
+  logger.info({ tag: 'cocossetlocal' }, `${key} -> ${this.fallback()}`);
+  if (key === 'asmuh') return 'GMT+05:30';
+});
 // Unity.setVersion('6000.0.31f1');
 // Unity.patchSsl();
 // Unity.attachScenes();
@@ -923,13 +954,12 @@ Native.attachSystemPropertyGet(
 //   () => {},
 // );
 JniTrace.attach((thisRef) => ProcMaps.inRange(thisRef.returnAddress), true);
-
 // Native.hookGlGetString();
 Network.attachGetAddrInfo(true);
 Native.System.hookGetauxval();
 Native.System.hookSystem();
 Native.System.hookPopen();
-// Native.TheEnd.hook();
+Native.TheEnd.hook();
 // Interceptor.attach(Libc.vsnprintf, {
 //     onEnter(args) {
 //         this.dst = args[0];
@@ -1006,15 +1036,16 @@ Interceptor.replace(
 Native.Files.hookRemove(() => true);
 
 // Native.log(Libc.memchr, 'pci', { predicate: ProcMaps.inRange });
+// Interceptor.attach(Libc.memcmp, memcmp);
 // Interceptor.attach(Libc.memmove, memmove);
 // Native.log(Libc.strlen, 's', { predicate: ProcMaps.inRange });
-// Native.log(Libc.pthread_create, 'pp2p', {
-//   predicate: ProcMaps.inRange,
-//   transform: {
-//     2: Native.addressOf,
-//     NaN: (ptr) => (isNully(ptr) ? `${NULL}` : hexdump(ptr, { length: 0xf, ansi: true, header: false })),
-//   },
-// });
+Native.log(Libc.pthread_create, 'pp2p', {
+  predicate: ProcMaps.inRange,
+  transform: {
+    2: Native.addressOf,
+    NaN: (ptr) => (isNully(ptr) ? `${NULL}` : hexdump(ptr, { length: 0xf, ansi: true, header: false })),
+  },
+});
 // Native.log(Native.getEnumerated(Process.getModuleByName('libc.so'), '__start_thread'), 'p', {});
 // Native.log(Native.getEnumerated(Process.getModuleByName('libc.so'), '_ZL15__pthread_startPv'), 'p', {});
 Native.Strings.hookStrstr(predicate);
@@ -1056,7 +1087,7 @@ Native.replace(Libc.dlsym, 'pointer', ['pointer', 'pointer'], function (s0, i1) 
 Native.Time.hookTime(ProcMaps.inRange);
 Anticloak.Debug.hookPtrace();
 Java.deoptimizeEverything();
-Dump.hookArtDexFile();
+// Dump.hookArtDexFile();
 Native.log(DebugSymbol.fromName('AAssetManager_open').address, 'psi');
 
 // biome-ignore lint/complexity/useArrowFunction: <explanation>

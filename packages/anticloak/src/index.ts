@@ -106,6 +106,10 @@ function hookHasFeature() {
     predicate(_, i) {
       return i !== 0;
     },
+    loggingPredicate(_, ...args) {
+      if (`${args[0]}` === 'android.hardware.touchscreen.multitouch.jazzhand') return false;
+      return true;
+    },
     replace(method, ...args) {
       const feature = `${args[0]}`;
       for (const key of HARDWARE_FEATURES) {

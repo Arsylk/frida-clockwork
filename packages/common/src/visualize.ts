@@ -193,6 +193,14 @@ function visualObject(value: NativePointer, type?: string): string {
       const str = Java.cast(value, Classes.CharSequence);
       return Color.string(str);
     }
+    if (type === ClassesString.Integer) {
+      const itgr = Java.cast(value, Classes.Integer);
+      return Color.number(`${itgr.intValue()}`);
+    }
+    if (type === ClassesString.Long) {
+      const lon = Java.cast(value, Classes.Long);
+      return Color.number(`${lon.longValue()}`);
+    }
 
     if (type === ClassesString.InputDevice) {
       const dev = Java.cast(value, Classes.InputDevice);

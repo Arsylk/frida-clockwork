@@ -132,7 +132,7 @@ function proxyStruct<T extends { [key: string]: StructTypes }>(data: T): StructC
           cache[key] = {
             ptr: crnt,
             get value() {
-              return crnt.readInt();
+              return crnt.toInt32();
             },
           };
           offset += 0x4;

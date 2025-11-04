@@ -8,7 +8,13 @@ import { always, ClassLoader, Filter, getHookUnique, hook, ifKey } from '@clockw
 import { attach, barebone } from '@clockwork/jnitrace';
 import { logger } from '@clockwork/logging';
 import { log, Logcat } from '@clockwork/native';
-import { attachGetAddrInfo, injectNative, injectSsl, useTrustManager } from '@clockwork/network';
+import {
+  attachGetAddrInfo,
+  attachNativeSocket,
+  injectNative,
+  injectSsl,
+  useTrustManager,
+} from '@clockwork/network';
 import Java from 'frida-java-bridge';
 import * as Unity from '@clockwork/unity';
 import { mock } from '@clockwork/anticloak/dist/country';
@@ -106,15 +112,21 @@ Java.performNow(() => {
   hook(Classes.TimeZone, 'getDefault', {
     loggingPredicate: always(false),
     replace(method) {
-      // return Classes.TimeZone.getDefault();
-      return Classes.TimeZone.getTimeZone('Asia/Saigon');
+      return Classes.TimeZone.getDefault();
+      // return Classes.TimeZone.getTimeZone('Asia/Saigon');
     },
   });
   hook(Classes.WebView, 'loadUrl');
   hook(Classes.SharedPreferencesImpl, 'getInt', {
     replace: ifKey((key) => {
-      if (key === 'H4rX7pR5_3') return 1;
+      if (key === 'xfthnzfxgtnjq_2d21wdwqs4') return 1;
     }),
   });
 });
-hookArtDexFile();
+
+Unity.patchSsl();
+Unity.attachScenes();
+Unity.attachStrings();
+
+attachGetAddrInfo(true);
+attachNativeSocket();

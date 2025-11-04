@@ -108,6 +108,7 @@ const ClassesString = {
   MessageDigest: 'java.security.MessageDigest',
   Base64: 'java.util.Base64',
   DatagramChannelImpl: 'sun.nio.ch.DatagramChannelImpl',
+  DatagramSocket: 'java.net.DatagramSocket',
   InputDevice: 'android.view.InputDevice',
   Window: 'android.view.Window',
   WindowInsets: 'android.view.WindowInsets',

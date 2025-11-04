@@ -19,8 +19,20 @@ function toHexString(array: ArrayBuffer | null, separator = ' ') {
   if (!array) return;
   const buff = new Uint8Array(array);
   const mapped: string[] = [];
-  for (const n of buff) mapped.push(toHex(n));
+  for (const n of buff) {
+    mapped.push(toHex(n));
+  }
   return mapped.join(separator);
+}
+
+function ba2hex(b): string {
+  let hexStr = '';
+  for (let i = 0; i < b.length; i++) {
+    let hex = (b[i] & 0xff).toString(16);
+    hex = hex.length === 1 ? `0${hex}` : hex;
+    hexStr += hex;
+  }
+  return hexStr;
 }
 
 function toByteSize(size: number): string {
@@ -118,6 +130,7 @@ export {
   toByteSize,
   toHex,
   toHexString,
+  ba2hex,
   toPrettyType,
   uuid,
 };

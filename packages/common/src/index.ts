@@ -69,7 +69,46 @@ function getApplicationContext(): Java.Wrapper {
   return Classes.ActivityThread.currentApplication().getApplicationContext();
 }
 
+function jarrayToBuffer(jarray: []): ArrayBuffer {
+  const uint8s = new Uint8Array(jarray);
+  return uint8s.buffer;
+}
+
 const isNully = (ptr: NativePointerValue) => !ptr || ptr === NULL || `${ptr}` === '0x0';
+
+const isNullyVararg = (...ptr: NativePointerValue[]) => {
+  for (const p of ptr) if (isNully(p)) return true;
+  return false;
+};
+
+const filterMulti = (
+  filter: [[] | string[] | string, [] | string[] | string][],
+  first: string,
+  second: string,
+) => {
+  for (const [tfirst, tsecond] of filter) {
+    let firstpass = isIterable(tfirst) && tfirst.length === 0;
+    let secondpass = isIterable(tsecond) && tsecond.length === 0;
+    if (!firstpass) {
+      for (const arrFirst of isIterable(tfirst) ? tfirst : [tfirst]) {
+        if (arrFirst === first) {
+          firstpass = true;
+          break;
+        }
+      }
+    }
+    if (!secondpass) {
+      for (const arrSecond of isIterable(tsecond) ? tsecond : [tsecond]) {
+        if (arrSecond === second) {
+          secondpass = true;
+          break;
+        }
+      }
+    }
+    if (firstpass && secondpass) return true;
+  }
+  return false;
+};
 
 const emitter = new EventEmitter();
 declare global {
@@ -158,4 +197,7 @@ export {
   tryErr,
   isIterable,
   hookException,
+  jarrayToBuffer,
+  filterMulti,
+  isNullyVararg,
 };
