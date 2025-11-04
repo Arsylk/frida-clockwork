@@ -10,8 +10,8 @@
     "webpack": "npx webpack --config webpack.config.js",
     "watch:tsc": "npx tsc -b -w",
     "watch:webpack": "npx webpack --config webpack.config.js --watch",
-    "attach": "run() { frida -U \"$1\" -l ./script.js -o ./session.txt; }; run",
-    "spawn": "run() { frida -U -f \"$1\" -l ./script.js -o ./session.txt ; }; run"
+    "attach": "run() { frida -U \"$1\" -P '{\"packageName\": \"$1\"}' -l ./script.js -o ./session.txt; }; run",
+    "spawn": "run() { frida -U -f \"$1\" -P '{\"packageName\": \"$1\"}' -l ./script.js -o ./session.txt ; }; run"
   },
   "keywords": [
     "frida"
