@@ -1,5 +1,6 @@
-import { Libc } from '@clockwork/common';
+import { isNully, Libc } from '@clockwork/common';
 import { logger } from '@clockwork/logging';
+import _strlen from '@src/strlen.c';
 import _memcmp from '@src/memcmp.c';
 import _memmove from '@src/memmove.c';
 import _procmaps from '@src/procmaps.c';
@@ -152,11 +153,12 @@ namespace ElfHeader {
     addressOf: ProcMaps.cm.addressOf,
     ensureReadable: new NativeCallback(
       function (addr: NativePointer) {
-        const sec = Memory.queryProtection(addr);
-        const pages = Math.floor(Number(addr) / Process.pageSize);
-        const pagee = pages + Process.pageSize;
-        logger.info({ tag: 'ensurereadable' }, `addr: ${addr} page: ${ptr(pages)}-${ptr(pagee)}`);
-        return sec.includes('r') ? ptr(0x1) : ptr(0x0);
+        return NULL;
+        // const sec = Memory.queryProtection(addr);
+        // const pages = Math.floor(Number(addr) / Process.pageSize);
+        // const pagee = pages + Process.pageSize;
+        // // logger.info({ tag: 'ensurereadable' }, `addr: ${addr} page: ${ptr(pages)}-${ptr(pagee)}`);
+        // return sec.includes('r') ? ptr(0x1) : ptr(0x0);
       },
       'pointer',
       ['pointer'],
@@ -208,6 +210,16 @@ namespace ElfHeader {
 //     }
 // }
 
+const strlen = callback(
+  new CModule(fbase64(_strlen), {
+    frida_log: get_frida_log('strlen'),
+    sprintf: Libc.sprintf,
+    isprint: Libc.isprint,
+    inRange: ProcMaps.cm.inRange,
+    addressOf: ProcMaps.cm.addressOf,
+  }),
+);
+
 const memcmp = callback(
   new CModule(fbase64(_memcmp), {
     frida_log: get_frida_log('memcmp'),
@@ -218,6 +230,9 @@ const memcmp = callback(
   }),
 );
 
+const ptr = Memory.alloc(128);
+Memory.protect(ptr, 128, 'rwx');
+Libc.memset(ptr, 0, 128);
 const memmove = callback(
   new CModule(fbase64(_memmove), {
     frida_log: get_frida_log('memmove'),
@@ -225,6 +240,8 @@ const memmove = callback(
     isprint: Libc.isprint,
     inRange: ProcMaps.cm.inRange,
     addressOf: ProcMaps.cm.addressOf,
+    geton: new NativeCallback(() => ptr, 'pointer', []),
+    verbose: Memory.alloc(1),
   }),
 );
 
@@ -233,6 +250,10 @@ Object.defineProperties(globalThis, {
     value: ElfHeader,
     writable: false,
   },
+  memmove: {
+    value: memmove,
+    writable: false,
+  },
 });
 
-export { memcmp, memmove, ElfHeader, ProcMaps, fbase64, LinkerSym };
+export { strlen, memcmp, memmove, ElfHeader, ProcMaps, fbase64, LinkerSym };

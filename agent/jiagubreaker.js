@@ -162,9 +162,10 @@ Process.attachModuleObserver({
             },
             onLeave(retval) {
               console.log(
-                `[${name}]:${this.uq} return`,
+                `[${name}]:${this.uq} return ${retval}`,
                 `${this.returnAddress.sub(base)}`
               );
+              if ([18, 20, 28, 34].includes(this.uq)) retval.replace(ptr(0x0));
             },
           });
           // console.log(`${addr} ${name} OK`);
@@ -172,50 +173,6 @@ Process.attachModuleObserver({
           // console.log(`${addr} ${name} ${e}`);
         }
       }
-      Interceptor.attach(base.add(0xc6f8), {
-        onEnter(args) {
-          this.sym = args[1].readCString();
-        },
-        onLeave(retval) {
-          console.log("[dlsym_mk3]", `${this.sym} ? ${retval.sub(base)}`);
-        },
-      });
-
-      Interceptor.attach(base.add(0x11564), {
-        onEnter(args) {
-          console.log(
-            "[maps_mk2]",
-            `${base.add(0x2bf47c).readPointer()} ? ${this.returnAddress.sub(
-              base
-            )}`
-          );
-        },
-        onLeave(retval) {},
-      });
-
-      // Interceptor.attach(
-      //   getEnumerated(module, "interpreter_wrap_int64_t_bridge"),
-      //   {
-      //     onEnter({ 0: a0, 1: a1, 2: a2, 3: a3, 4: a4, 5: a5 }) {
-      //       console.log("[interpreter_wrap_int64_t_bridge]", [
-      //         a0.sub(base),
-      //         a1,
-      //         a2.sub(base),
-      //         a3.sub(base),
-      //         a4,
-      //         a5,
-      //       ]);
-      //       console.log(
-      //         Thread.backtrace(this.context, Backtracer.FUZZY)
-      //           .map(DebugSymbol.fromAddress)
-      //           .join("\n\t")
-      //       );
-      //     },
-      //     onLeave(retval) {
-      //       console.log("[interpreter_wrap_int64_t_bridge]", retval);
-      //     },
-      //   }
-      // );
     }
   },
 });
@@ -254,11 +211,19 @@ function hookmore(name) {
               this.symbol = args[1].readCString();
             },
             onLeave(retval) {
+              let newval = ptr(0x0);
+              if (this.symbol === "mprotect") {
+                newval = retval;
+              }
               console.log(
                 `[${f.sub(range.base)}]`,
-                `${this.symbol} = ${retval} | 0x0`
+                `${this.symbol} = ${retval} | ${newval}`
               );
-              retval.replace(ptr(0x0));
+              retval.replace(newval);
+              Interceptor.attach(retval, {
+                onEnter: console.log,
+                onLeave: console.log,
+              });
             },
           });
           break;
@@ -276,65 +241,65 @@ function hookdex(libart) {
   if (dex === NULL) {
     console.log("[dex]", "failed to find symbol");
     return;
+
+    Interceptor.attach(dex, {
+      onEnter(args) {
+        const dexfile = args[5];
+        const base = dexfile.add(Process.pointerSize).readPointer();
+        const size = dexfile.add(Process.pointerSize * 2).readUInt();
+        if (dexes.has(`${base}`)) return;
+        dexes.set(`${base}`, size);
+        console.log(
+          "[dex]",
+          `${base.readCString(4).replace("\n", "\\n")} ${size}`
+        );
+        Memory.protect(base, size, "r");
+        const pkgbarr = File.readAllBytes("/proc/self/cmdline");
+        let pkg = "";
+        for (const b of new Uint8Array(pkgbarr)) {
+          if (b === 0x0) break;
+          pkg += String.fromCharCode(b);
+        }
+        const file = `/data/data/${pkg}/classes_${base}.dex`;
+        File.writeAllBytes(file, base.readByteArray(size));
+        console.log("[dex]", `saved ${file}`);
+      },
+    });
   }
 
-  Interceptor.attach(dex, {
-    onEnter(args) {
-      const dexfile = args[5];
-      const base = dexfile.add(Process.pointerSize).readPointer();
-      const size = dexfile.add(Process.pointerSize * 2).readUInt();
-      if (dexes.has(`${base}`)) return;
-      dexes.set(`${base}`, size);
-      console.log(
-        "[dex]",
-        `${base.readCString(4).replace("\n", "\\n")} ${size}`
-      );
-      Memory.protect(base, size, "r");
-      const pkgbarr = File.readAllBytes("/proc/self/cmdline");
-      let pkg = "";
-      for (const b of new Uint8Array(pkgbarr)) {
-        if (b === 0x0) break;
-        pkg += String.fromCharCode(b);
+  function hookhide(linker, predicate) {
+    const solist_get_head = new NativeFunction(
+      getEnumerated(linker, "__dl__Z15solist_get_headv"),
+      "pointer",
+      []
+    );
+    const soinfo_get_soname = new NativeFunction(
+      getEnumerated(linker, "__dl__ZNK6soinfo10get_sonameEv"),
+      "pointer",
+      ["pointer"]
+    );
+    const soinfo_get_realpath = new NativeFunction(
+      getEnumerated(linker, "__dl__ZNK6soinfo12get_realpathEv"),
+      "pointer",
+      ["pointer"]
+    );
+
+    const nextoff = Process.pointerSize * 5;
+    let item = solist_get_head();
+    let prev = null;
+    while (`${item}` !== "0x0") {
+      const name = soinfo_get_soname(item).readCString();
+      const path = soinfo_get_realpath(item).readCString();
+      const next = item.add(nextoff).readPointer();
+      if (predicate(name) || predicate(path)) {
+        const nptr = prev?.add(nextoff);
+        Memory.protect(nptr, Process.pointerSize, "rwx");
+        nptr?.writePointer(next);
+        console.log("[linkskip]", name, path);
       }
-      const file = `/data/data/${pkg}/classes_${base}.dex`;
-      File.writeAllBytes(file, base.readByteArray(size));
-      console.log("[dex]", `saved ${file}`);
-    },
-  });
-}
-
-function hookhide(linker, predicate) {
-  const solist_get_head = new NativeFunction(
-    getEnumerated(linker, "__dl__Z15solist_get_headv"),
-    "pointer",
-    []
-  );
-  const soinfo_get_soname = new NativeFunction(
-    getEnumerated(linker, "__dl__ZNK6soinfo10get_sonameEv"),
-    "pointer",
-    ["pointer"]
-  );
-  const soinfo_get_realpath = new NativeFunction(
-    getEnumerated(linker, "__dl__ZNK6soinfo12get_realpathEv"),
-    "pointer",
-    ["pointer"]
-  );
-
-  const nextoff = Process.pointerSize * 5;
-  let item = solist_get_head();
-  let prev = null;
-  while (`${item}` !== "0x0") {
-    const name = soinfo_get_soname(item).readCString();
-    const path = soinfo_get_realpath(item).readCString();
-    const next = item.add(nextoff).readPointer();
-    if (predicate(name) || predicate(path)) {
-      const nptr = prev?.add(nextoff);
-      Memory.protect(nptr, Process.pointerSize, "rwx");
-      nptr?.writePointer(next);
-      console.log("[linkskip]", name, path);
+      prev = item;
+      item = next;
     }
-    prev = item;
-    item = next;
   }
 }
 

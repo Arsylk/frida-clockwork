@@ -49,6 +49,7 @@ function filterMethodId(this: InvocationContext, methodName: string, clazzName: 
       ],
       [],
     ],
+    [['android.os.Debug'], ['isDebuggerConnected']],
   ];
   return filterMulti(filters, clazzName, methodName);
 }

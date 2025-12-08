@@ -4,6 +4,7 @@ import { dumpLib } from './soDump.js';
 export * from './dexDump.js';
 export * from './soDump.js';
 export * from './inMemoryDexDump.js';
+export * from './byteBuffer.js';
 
 function dumpExports(libname: string) {
   const module = Process.findModuleByName(libname);

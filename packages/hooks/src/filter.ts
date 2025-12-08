@@ -107,6 +107,14 @@ const Filter = {
 
     return true;
   },
+  bundle: (method: Java.Method, ...args: any) => {
+    if (method.methodName === 'getInt') {
+      if (args[0] === 'text__com.android.text.flags.fix_line_height_for_locale') {
+        return false;
+      }
+    }
+    return true;
+  },
   url: () => {
     const trace = stacktrace();
     if (trace.includes('at com.facebook.internal.')) return false;

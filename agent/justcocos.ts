@@ -2,23 +2,32 @@ import { BuildProp, Country, generic, InstallReferrer } from '@clockwork/anticlo
 import { SoInfo } from '@clockwork/common/dist/define/linker';
 
 import { ElfHeader, LinkerSym, memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
-import { ClassesString, Consts, Text, tryNull } from '@clockwork/common';
+import { ClassesString, Consts, enumerateMembers, getFindUnique, Text, tryNull } from '@clockwork/common';
 import { dumpLib, hookArtDexFile, initSoDump } from '@clockwork/dump';
 import { always, ClassLoader, Filter, getHookUnique, hook, ifKey } from '@clockwork/hooks';
 import { attach, barebone } from '@clockwork/jnitrace';
-import { logger } from '@clockwork/logging';
-import { log, Logcat } from '@clockwork/native';
-import {
-  attachGetAddrInfo,
-  attachNativeSocket,
-  injectNative,
-  injectSsl,
-  useTrustManager,
-} from '@clockwork/network';
-import Java from 'frida-java-bridge';
 import * as Unity from '@clockwork/unity';
-import { mock } from '@clockwork/anticloak/dist/country';
+import { log, Logcat } from '@clockwork/native';
+import { attachGetAddrInfo, attachNativeSocket, injectSsl } from '@clockwork/network';
+import Java from 'frida-java-bridge';
 dumpLib;
+
+const uniqHook = getHookUnique(false);
+const uniqFind = getFindUnique(false);
+const uniqEnum = (clazzName: string, depth?: number) => {
+  uniqFind(clazzName, (clazz) => {
+    hook(clazz, '$init', { loggingPredicate: (method) => method.argumentTypes.length > 0 });
+    enumerateMembers(
+      clazz,
+      {
+        onMatchMethod(clazz, member, depth) {
+          hook(clazz, member);
+        },
+      },
+      depth,
+    );
+  });
+};
 
 const libc = Process.getModuleByName('libc.so');
 Logcat.hookLogcat(function (msgx) {
@@ -26,7 +35,7 @@ Logcat.hookLogcat(function (msgx) {
     ProcMaps.printStacktrace();
   }
 });
-injectSsl();
+ClassLoader.perform(injectSsl);
 attach((x) => ProcMaps.inRange(x.returnAddress), true);
 Process.attachModuleObserver({
   onAdded(module) {
@@ -91,7 +100,7 @@ log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
 //               },
 //               'void',
 //               ['int'],
-//             ),
+//             )_,
 //           );
 //         },
 //       });
@@ -99,8 +108,9 @@ log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
 //   },
 // });
 log(Libc.strdup, 's', { predicate: ProcMaps.inRange });
-Interceptor.attach(Libc.memmove, memmove);
-Interceptor.attach(Libc.memcmp, memcmp);
+log(Libc.memchr, 'pci', { predicate: ProcMaps.inRange });
+// Interceptor.attach(Libc.memmove, memmove);
+// Interceptor.attach(Libc.memcmp, memcmp);
 Java.performNow(() => {
   generic();
   hook(Classes.Locale, 'getDefault', {
@@ -112,21 +122,34 @@ Java.performNow(() => {
   hook(Classes.TimeZone, 'getDefault', {
     loggingPredicate: always(false),
     replace(method) {
-      return Classes.TimeZone.getDefault();
-      // return Classes.TimeZone.getTimeZone('Asia/Saigon');
+      // return Classes.TimeZone.getDefault();
+      return Classes.TimeZone.getTimeZone('Asia/Dhaka');
     },
   });
   hook(Classes.WebView, 'loadUrl');
-  hook(Classes.SharedPreferencesImpl, 'getInt', {
+  hook(Classes.SharedPreferencesImpl, 'getBoolean', {
     replace: ifKey((key) => {
-      if (key === 'xfthnzfxgtnjq_2d21wdwqs4') return 1;
+      if (key === 'campaign') return 'Non-organic';
+      if (key === 'toCenter') return true;
+      if (key === 'kwsk') return 'https://google.pl/search?q=hi';
     }),
   });
 });
 
+Unity.setVersion('6000.1.13f1');
 Unity.patchSsl();
 Unity.attachScenes();
 Unity.attachStrings();
 
 attachGetAddrInfo(true);
 attachNativeSocket();
+InstallReferrer.replace();
+
+Process.attachModuleObserver({
+  onAdded(module) {
+    if (module.name === 'libil2cpp.so') {
+    }
+  },
+});
+
+ClassLoader.perform(() => {});

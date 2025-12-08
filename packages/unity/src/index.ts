@@ -14,7 +14,6 @@ function setVersion(version: string) {
 
 function attachStrings() {
   Il2Cpp.perform(() => {
-    // const mscorlib = Il2Cpp.domain.assembly('mscorlib').image;
     // const concat = mscorlib.class('System.String').method<Il2Cpp.String>('Concat', 1);
     // concat.implementation = (...args) => {
     //     const ret = mscorlib.class('System.String').method<Il2Cpp.String>('Concat', 1).invoke(args[0]);
@@ -24,7 +23,6 @@ function attachStrings() {
     //     return ret;
     // };
 
-    // const SystemString = Il2Cpp.corlib.assembly.image.class('System.String');
     // logger.info({ tag: 'test' }, `${SystemString.methods}`);
     // const op_Equals = SystemString.method<boolean>('op_Equality', 2);
     // op_Equals.implementation = function (...args) {
@@ -34,24 +32,50 @@ function attachStrings() {
     //
     //   return op_Equals.invoke(args[0], args[1]);
     // };
-
+    //
+    const mscorlib = Il2Cpp.domain.assembly('mscorlib').image;
+    const SystemString: Il2Cpp.Class = Il2Cpp.corlib.assembly.image.class('System.String');
+    for (const m of SystemString.methods) {
+      if (m.name === 'Equals') {
+        if (!m.isStatic) {
+          m.implementation = function (...args) {
+            const _this0 = new Il2Cpp.String(this.handle);
+            const this0 = !_this0.isNull() ? _this0.content : null;
+            const _arg0 = new Il2Cpp.String(args[0] as NativePointer);
+            const arg0 = !_arg0.isNull() ? _arg0.content : null;
+            console.log(`${m.class.fullName}::${m.name}(this0="${this0}", arg0="${arg0}")`);
+            return true;
+          };
+        }
+      }
+    }
     // const Equals = SystemString.method<boolean>('Equals', 1);
     // Equals.implementation = function (...args) {
-    //   logger.info({ tag: 'Equals' }, `${args[0]} == ${args[1]}`);
-    //   const arg1 = new Il2Cpp.String(args[1] as NativePointer).content;
-    //   if (arg1 === 'VN' || arg1 === 'Asia/Saigon') return true;
+    //   const arg0 = new Il2Cpp.String(this.handle).content;
+    //   const arg1 = new Il2Cpp.String(args[0] as NativePointer).content;
+    //   logger.info({ tag: 'Equals' }, `${arg0} == ${arg1}`);
+    //   if (arg0 === '0' && arg1 === '1') return true;
     //
-    //   return Equals.invoke(args[0], args[1]);
+    //   return Equals.invoke(args[0]);
+    // };
+    //
+    // const sEquals = SystemString.method<boolean>('Equals', 2);
+    // sEquals.implementation = function (...args) {
+    //   console.log('sEQUALS');
+    //   const arg0 = new Il2Cpp.String(args[0] as NativePointer).content;
+    //   const arg1 = new Il2Cpp.String(args[1] as NativePointer).content;
+    //   logger.info({ tag: 'Equals' }, `${arg0} == ${arg1}`);
+    //   if (arg0 === '0' && arg1 === '1') return true;
+    //
+    //   return sEquals.invoke(args[0], args[1]);
     // };
 
     // const SystemString = Il2Cpp.corlib.assembly.image.class('System.String');
-    // logger.info({ tag: 'test' }, `${SystemString}`);
-    // logger.info({ tag: 'test' }, `${SystemString.methods}`);
     // const Contains = SystemString.method<boolean>('Contains', 1);
     // Contains.implementation = function (...args) {
-    //     logger.info({ tag: 'System.String.Contains' }, `${this} =~ ${args[0]}`);
-    //     if (new Il2Cpp.String(args[0] as NativePointer).content === 'Brazil') return true;
-    //     return this.method<boolean>(Contains.name, Contains.parameterCount).invoke(...args);
+    //   logger.info({ tag: 'System.String.Contains' }, `${this} =~ ${args[0]}`);
+    //   if (new Il2Cpp.String(args[0] as NativePointer).content === 'Brazil') return true;
+    //   return this.method<boolean>(Contains.name, Contains.parameterCount).invoke(...args);
     // };
 
     Il2Cpp.trace(true)
@@ -65,6 +89,7 @@ function attachStrings() {
           !m.name.includes('CtorCharArrayStartLength') &&
           m.name !== 'Ctor' &&
           m.name !== 'CreateString' &&
+          m.name !== 'Equals' &&
           m.name !== 'wstrcpy',
       )
       .and()

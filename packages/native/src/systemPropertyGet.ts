@@ -15,7 +15,7 @@ const spammyKeys = [
 ];
 
 function attachSystemPropertyGet(
-  predicate?: (returnAddress: NativePointer) => true | undefined,
+  predicate?: (returnAddress: NativePointer) => boolean,
   fn?: (this: InvocationContext, key: string, value: string | null) => string | null | undefined,
 ) {
   fn &&

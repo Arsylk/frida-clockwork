@@ -198,13 +198,13 @@ log(libc.getExportByName('strcat'), 'ss', { call: true, ret: false, predicate: P
 log(libc.getExportByName('strcmp'), 'ssu', {
   predicate: ProcMaps.inRange,
   call(args) {
-    // this.arg0 = args[0].readCString();
-    // this.arg1 = args[1].readCString();
+    this.arg0 = args[0].readCString();
+    this.arg1 = args[1].readCString();
   },
   ret(retval) {
-    // if (this.arg1.startsWith(' RES_RULE')) {
-    //   retval.replace(ptr(0x0));
-    // }
+    if (this.arg1.startsWith(' RES_RULE')) {
+      retval.replace(ptr(0x0));
+    }
   },
 });
 
@@ -242,55 +242,55 @@ log(libc.getExportByName('access'), 's', {
     // }
   },
 });
-// log(libc.getExportByName('fopen'), 'si', {
-// predicate: ProcMaps.inRange,
-// call(args) {
-// ProcMaps.printStacktrace(this.context);
-// const path = args[0].readCString();
-// if (path?.includes('/maps')) {
-// args[0] = Memory.allocUtf8String('/dev/null');
-// }
-// if (path.endsWith('/libc.so')) {
-// const newpath = `${getSelfFiles()}/fakelibc.so`;
-// const bytesto = libc.base.readByteArray(libc.size);
-// File.writeAllBytes(newpath, bytesto);
-// args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
-// }
-// if (args[0].readCString()?.includes('/cmdline')) {
-//   args[0] = Memory.allocUtf8String('/dev/null');
-// }
-// if (args[0].readCString()?.includes('/libc.so')) {
-//   args[0] = Memory.allocUtf8String('/dev/null');
-// }
-// },
-// });
-// log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
-// log(libc.getExportByName('open64'), 'si', {
-//   predicate: ProcMaps.inRange,
-// });
-// log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
-// log(libc.getExportByName('sigfillset'), 'pp', { predicate: ProcMaps.inRange });
-// log(libc.getExportByName('setpgid'), 'pp', { predicate: ProcMaps.inRange });
-// log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
-// log(libc.getExportByName('lseek'), '0p2', {
-//   predicate: ProcMaps.inRange,
-//   transform: {
-//     0: (ptr) => readFdPath(ptr.toInt32()),
-//     2: (ptr) => Consts.whence[ptr.toInt32()],
-//   },
-// });
-// log(libc.getExportByName('read'), '0pi', {
-//   predicate: ProcMaps.inRange,
-//   call(args) {
-//     this.a1 = args[1];
-//   },
-//   transform: {
-//     0: (x) => readFdPath(x.toInt32()) ?? `${x}`,
-//     NaN: function (ptr) {
-//       return hexdump(this.a1, { length: Math.min(ptr.toInt32(), 0x100) });
-//     },
-//   },
-// });
+log(libc.getExportByName('fopen'), 'si', {
+  predicate: ProcMaps.inRange,
+  call(args) {
+    ProcMaps.printStacktrace(this.context);
+    const path = args[0].readCString();
+    if (path?.includes('/maps')) {
+      args[0] = Memory.allocUtf8String('/dev/null');
+    }
+    if (path.endsWith('/libc.so')) {
+      const newpath = `${getSelfFiles()}/fakelibc.so`;
+      const bytesto = libc.base.readByteArray(libc.size);
+      File.writeAllBytes(newpath, bytesto);
+      args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
+    }
+    if (args[0].readCString()?.includes('/cmdline')) {
+      args[0] = Memory.allocUtf8String('/dev/null');
+    }
+    if (args[0].readCString()?.includes('/libc.so')) {
+      args[0] = Memory.allocUtf8String('/dev/null');
+    }
+  },
+});
+log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('open64'), 'si', {
+  predicate: ProcMaps.inRange,
+});
+log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('sigfillset'), 'pp', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('setpgid'), 'pp', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('lseek'), '0p2', {
+  predicate: ProcMaps.inRange,
+  transform: {
+    0: (ptr) => readFdPath(ptr.toInt32()),
+    2: (ptr) => Consts.whence[ptr.toInt32()],
+  },
+});
+log(libc.getExportByName('read'), '0pi', {
+  predicate: ProcMaps.inRange,
+  call(args) {
+    this.a1 = args[1];
+  },
+  transform: {
+    0: (x) => readFdPath(x.toInt32()) ?? `${x}`,
+    NaN: function (ptr) {
+      return hexdump(this.a1, { length: Math.min(ptr.toInt32(), 0x100) });
+    },
+  },
+});
 // Interceptor.replace(
 //   libc.getExportByName('remove'),
 //   new NativeCallback(
@@ -316,33 +316,35 @@ log(libc.getExportByName('access'), 's', {
 
 // hookPtrace();
 // TheEnd.hook();
-// Interceptor.attach(Libc.memmove, memmove);
-// Interceptor.attach(Libc.memcmp, memcmp);
 
-// injectNative();
-// injectSsl();
-// ClassLoader.perform(() => {
-//   uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
-//   uniqHook(ClassesString.DexPathList, '$init', {
-//     logging: { short: true, multiline: false },
-//   });
-// });
-mock('BR');
-// Java.performNow(() => {
-//   for (const cls of [Classes.SharedPreferencesImpl, Classes.Bundle]) {
-//     for (const str of ['getInt', 'getString', 'getBoolean']) {
-//       console.log('ninti', str);
-//       hook(cls, str, {
-//         replace: ifKey(function (arg) {
-//           if (`${arg}`.includes('aaaaaa')) {
-//             console.log('pass');
-//             return '%7B%22nIAy%2o2%3A%22mhhgn%22%2C%22iznoaTttP%22%3A%22%22%2C%22IxZtJ%22%3A%22kuiviO%22%2C%22kCPtFvZp%22%3A1%7D';
-//           }
-//         }),
-//       });
-//     }
-//   }
-// });
+attach((x) => ProcMaps.inRange(x.returnAddress), true);
+Interceptor.attach(Libc.memmove, memmove);
+Interceptor.attach(Libc.memcmp, memcmp);
+
+injectNative();
+injectSsl();
+ClassLoader.perform(() => {
+  uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
+  uniqHook(ClassesString.DexPathList, '$init', {
+    logging: { short: true, multiline: false },
+  });
+});
+mock('IN');
+Java.performNow(() => {
+  for (const cls of [Classes.SharedPreferencesImpl, Classes.Bundle]) {
+    for (const str of ['getInt', 'getString', 'getBoolean']) {
+      console.log('ninti', str);
+      hook(cls, str, {
+        replace: ifKey(function (arg) {
+          if (`${arg}`.includes('aaaaaa')) {
+            console.log('pass');
+            return '%7B%22nIAy%2o2%3A%22mhhgn%22%2C%22iznoaTttP%22%3A%22%22%2C%22IxZtJ%22%3A%22kuiviO%22%2C%22kCPtFvZp%22%3A1%7D';
+          }
+        }),
+      });
+    }
+  }
+});
 
 log(libc.getExportByName('mprotect'), 'pi2', {
   nolog: true,
@@ -360,20 +362,21 @@ log(libc.getExportByName('mprotect'), 'pi2', {
     }
   },
 });
-log(libdl.getExportByName('dlopen'), 'si', {
-  call(args) {
-    const name = args[0].readCString();
-    this.name = name;
-  },
-  ret(retval) {
-    const name = this.name;
-    if (name) {
-      if (!found) {
-        // hookmore(name);
-      }
-    }
-  },
-});
+
+// log(libdl.getExportByName('dlopen'), 'si', {
+//   call(args) {
+//     const name = args[0].readCString();
+//     this.name = name;
+//   },
+//   ret(retval) {
+//     const name = this.name;
+//     if (name) {
+//       if (!found) {
+//         // hookmore(name);
+//       }
+//     }
+//   },
+// });
 
 let found = false;
 const mprots = new Array<{ base: NativePointer; size: number }>();
@@ -396,6 +399,7 @@ Process.attachModuleObserver({
       name === 'libandroid.so' ||
       name === 'libhwui.so' ||
       name === 'libsigner.so' ||
+      name === 'libswappywrapper.so' ||
       name === 'libnms.so' ||
       name === 'libmmkv.so' ||
       name === 'ibdB2CB406F37A3.so' ||
@@ -414,16 +418,7 @@ Process.attachModuleObserver({
       });
     }
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size, path: path })}`);
-    ProcMaps.addRange(module);
     if (name.includes('libtaietwl.so')) {
-      Interceptor.attach(getEnumerated(module, 'JNI_OnLoad'), {
-        onEnter(args) {
-          Interceptor.detachAll();
-          StalkerKt.stalk(this.threadId, module.base);
-        },
-      });
-      return;
-
       log(base.add(0xe8c8), '', { tag: '__start_routine' });
       log(base.add(0x11d6c), 'pp');
       log(base.add(0xd07c), 'pp', { tag: 'set_phdr_protections' });
@@ -662,23 +657,23 @@ function runme(offset, count = 322) {
 Object.defineProperty(globalThis, 'runme', runme);
 rpc.exports.runme = runme;
 
-// log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
-//   tag: 'call_constructors',
-//   transform: {
-//     0: (ptr) => tryNull(() => new SoInfo(ptr).getRealpath()) ?? `${ptr}`,
-//     NaN: function (ptr) {
-//       return (
-//         tryNull(() =>
-//           Text.stringify(JSON.parse(JSON.stringify(Process.getModuleByAddress(this.soinfo.getBase())))),
-//         ) ?? `${ptr}`
-//       );
-//     },
-//   },
-//   call(args) {
-//     const soinfo = (this.soinfo = new SoInfo(args[0]));
-//   },
-//   ret(retval) {},
-// });
+log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
+  tag: 'call_constructors',
+  transform: {
+    0: (ptr) => tryNull(() => new SoInfo(ptr).getRealpath()) ?? `${ptr}`,
+    NaN: function (ptr) {
+      return (
+        tryNull(() =>
+          Text.stringify(JSON.parse(JSON.stringify(Process.getModuleByAddress(this.soinfo.getBase())))),
+        ) ?? `${ptr}`
+      );
+    },
+  },
+  call(args) {
+    const soinfo = (this.soinfo = new SoInfo(args[0]));
+  },
+  ret(retval) {},
+});
 
 // Unity.setVersion('6000.0.31f1');
 // Unity.patchSsl();

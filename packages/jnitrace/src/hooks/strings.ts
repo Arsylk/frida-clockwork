@@ -51,7 +51,7 @@ function getStringHooks(envWrapper: EnvWrapper): JniHookItems {
 }
 
 function filterNewString(strText: string) {
-  const filters = ['com/cocos/lib/CocosHelper'];
+  const filters = ['com/cocos/lib/CocosHelper', 'com/cocos/lib/CanvasRenderingContext2DImpl'];
   if (filters.includes(strText)) return true;
   return false;
 }

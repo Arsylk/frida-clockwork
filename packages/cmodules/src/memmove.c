@@ -3,6 +3,7 @@
 typedef unsigned long long u64;
 typedef void *pthread_t;
 
+extern char* geton();
 extern int sprintf(char *str, const char *format, ...);
 extern int isprint(int ch);
 extern char *addressOf(void *ptr);
@@ -17,6 +18,8 @@ static void mklog(const char *format, ...) {
   frida_log(message);
   g_free(message);
 }
+
+extern gboolean verbose;;
 
 void hex_dump(const void *ptr, size_t x) {
   const unsigned char *p = ptr;
@@ -59,10 +62,14 @@ void onEnter(GumInvocationContext *ic) {
   size_t a2 = GPOINTER_TO_SIZE(gum_invocation_context_get_nth_argument(ic, 2));
   void *retaddr = (void *)gum_invocation_context_get_return_address(ic);
   guint threadId = gum_invocation_context_get_thread_id(ic);
-  if (inRange(retaddr)) {
-    mklog("%p %p %d %s \x1b[32m%d\x1b[0m", a0, a1, a2, addressOf(retaddr),
-          threadId);
-    hex_dump(a1, a2 > 1000 ? 1000 : a2);
+  if (inRange(retaddr) && sprintf((char *) geton(), "%.100s", a1) > 8) {
+    if (verbose) {
+      mklog("%p %p %d %s \x1b[32m%d\x1b[0m", a0, a1, a2, addressOf(retaddr),
+            threadId);
+      hex_dump(a1, a2 > 1000 ? 1000 : a2);
+    } else {
+      mklog("%.100s %s", a1, addressOf(retaddr));
+    }
   } else {
     // mklog("%p %p %p", BASE, SIZE, retaddr);
   }

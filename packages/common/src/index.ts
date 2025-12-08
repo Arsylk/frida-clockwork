@@ -66,7 +66,11 @@ function getApplication(): Java.Wrapper {
 }
 
 function getApplicationContext(): Java.Wrapper {
-  return Classes.ActivityThread.currentApplication().getApplicationContext();
+  return Classes.ActivityThread.currentApplication()?.getApplicationContext();
+}
+
+function javaB64Decode(str: string): Uint8Array {
+  return Classes.Base64.getDecoder().decode(str);
 }
 
 function jarrayToBuffer(jarray: []): ArrayBuffer {
@@ -152,9 +156,10 @@ Object.defineProperties(globalThis, {
     value: (libname: string) => {
       const module = Module.load(libname);
       if (!module) return -1;
-      const jni = module.enumerateExports().filter((e) => e.name === 'JNI_OnLoad')?.[0];
+      let jni = module.enumerateExports().filter((e) => e.name === 'JNI_OnLoad')?.[0]?.address;
+      jni ??= module.enumerateSymbols().filter((e) => e.name === 'JNI_OnLoad')?.[0]?.address;
       if (!jni) return -1;
-      const fn = new NativeFunction(jni.address, 'int', ['pointer', 'pointer']);
+      const fn = new NativeFunction(jni, 'int', ['pointer', 'pointer']);
       const env = Java.vm.tryGetEnv()?.handle;
       if (!env) return -1;
       return fn(env, NULL);

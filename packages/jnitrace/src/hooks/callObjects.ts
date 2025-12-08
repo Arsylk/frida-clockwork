@@ -1,4 +1,4 @@
-import { isIterable, vs, Consts, ClassesString, filterMulti, isNully } from '@clockwork/common';
+import { isIterable, vs, Consts, ClassesString, filterMulti, isNully, emitter } from '@clockwork/common';
 import { asExceptionSafe, asFunction, EnvWrapper, JniDefinition } from '../envWrapper.js';
 import { JNI } from '../jni.js';
 import { JniInvokeCallbacks } from '../jniInvokeCallback.js';
@@ -7,6 +7,7 @@ import { Color, logger } from '@clockwork/logging';
 import { addressOf } from '@clockwork/native';
 import { JniHookItem, JniHookItems } from '../hooks.js';
 import Java from 'frida-java-bridge';
+import { ProcMaps } from '@clockwork/cmodules';
 const { JavaPrimitive } = Consts;
 const { dim } = Color.use();
 
@@ -96,7 +97,6 @@ function filterCallObject(
   ];
   if (method.className === 'java.lang.ClassLoader' && method.name === 'loadClass') {
     if (jArgs && !isNully(jArgs[0] as NativePointer)) {
-      2111;
       const chars = Java.cast(jArgs[0] as NativePointer, Classes.String);
       if (['com/cocos/lib/CocosHelper', 'com/cocos/lib/CanvasRenderingContext2DImpl'].includes(`${chars}`)) {
         return true;
@@ -202,8 +202,17 @@ function afterCallObject(
   retval: InvocationReturnValue,
 ) {
   if (method.className === ClassesString.Settings$Global && method.name === 'getInt') {
-    retval.replace(ptr(0x1));
+    // retval.replace(ptr(0x0));
   }
+  if (method.className === ClassesString.Settings$Global && method.name === 'getInt') {
+    const key = Java.cast(jArgs[1] as any, Classes.String);
+    switch (`${key}`) {
+      case 'adb_enabled':
+      case 'development_settings_enabled':
+        retval.replace(ptr(0x0));
+    }
+  }
+
   if (method.name === 'getInstalledApplications') {
     const jobj = Java.cast(retval, Classes.List);
     logger.info({ tag: 'getInstalledApplications' }, `${jobj}`);
@@ -219,20 +228,26 @@ function afterCallObject(
       const newval = asFunction(jniEnv, JNI.NewStringUTF)(jniEnv, Memory.allocUtf8String(`${v}`));
       retval.replace(newval);
     };
-    if (
-      (method.className === 'com.cocos.lib.CocosLocalStorage' ||
-        method.className === 'org.cocos3dx.lib.Cocos2dxLocalStorage') &&
-      method.name === 'getItem'
-    ) {
-      const key = Java.cast(jArgs[1] as any, Classes.String);
-      logger.info({ tag: 'getItem', id: method.className }, `${key} -> ${retval}`);
+  }
+  if (
+    (method.className === 'com.cocos.lib.CocosLocalStorage' ||
+      method.className === 'org.cocos3dx.lib.Cocos2dxLocalStorage') &&
+    method.name === 'getItem'
+  ) {
+    logger.info({ tag: 'getItem', id: method.className }, `${retval}`);
+    const key = Java.cast(jArgs[0] as any, Classes.String);
+    logger.info({ tag: 'getItem', id: method.className }, `${key} -> ${retval}`);
 
-      const keyis = (k: any) => `${k}` === `${key}`;
-      const replret = (v: any) =>
-        retval.replace(asFunction(jniEnv, JNI.NewStringUTF)(jniEnv, Memory.allocUtf8String(`${v}`)));
+    const keyis = (k: any) => `${k}` === `${key}`;
+    const replret = (v: any) =>
+      retval.replace(asFunction(jniEnv, JNI.NewStringUTF)(jniEnv, Memory.allocUtf8String(`${v}`)));
 
-      // keyis('Date') && ProcMaps.printStacktrace(this.context), replret(Date.now().toString());
-    }
+    keyis('hasPurchase') && ProcMaps.printStacktrace(this.context), replret('true');
+    // keyis('ezutfn') && ProcMaps.printStacktrace(this.context), replret('https://google.pl/search?q=hi');
+  }
+
+  if (method.name === 'createVirtualDisplay') {
+    emitter.emit('jnicall', method.name);
   }
 }
 

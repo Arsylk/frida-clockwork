@@ -2,6 +2,7 @@ import Java from 'frida-java-bridge';
 import { tryNull, tryErr, Text } from '@clockwork/common';
 import { Color, subLogger } from '@clockwork/logging';
 import { getEnumerated, getSelfFiles, log, mkdir } from '@clockwork/native';
+import { exit } from 'process';
 const logger = subLogger('dexdump');
 const { dim, gray } = Color.use();
 
@@ -259,7 +260,7 @@ function hookArtDexFile(libart = Process.getModuleByName('libart.so')) {
           ),
           'ppsppp',
           {
-            nolog: true,
+            // nolog: true,
             call(args) {
               const dexfile = args[5];
               const base = dexfile.add(Process.pointerSize).readPointer();

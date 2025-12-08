@@ -32,7 +32,7 @@ function attachHooks(
     const item = items[i];
     if (!item) continue;
     const [key, val] = item;
-    if (key in exclude) continue;
+    if (exclude.includes(key)) continue;
     const def = JNI[key];
     const fn = envWrapper.getFunction<any, any>(def);
     Interceptor.attach(fn, {

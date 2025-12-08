@@ -1,8 +1,6 @@
 import * as Dump from '@clockwork/dump';
-import { Coverage } from '../node_modules/@worksbutnottested/stalker-coverage/dist/coverage.js';
 import * as JniTrace from '@clockwork/jnitrace';
 import * as Anticloak from '@clockwork/anticloak';
-import * as Unity from '@clockwork/unity';
 import { LinkerSym, memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
 import {
   Classes,
@@ -22,6 +20,7 @@ import {
   isNully,
   jarrayToBuffer,
   stacktrace,
+  tryErr,
   tryNull,
   vs,
 } from '@clockwork/common';
@@ -315,7 +314,7 @@ function hookCrypto() {
         //   console.log(e);
         // }
 
-        logger.info({ tag: 'decrypt' }, pink(stacktrace()));
+        // logger.info({ tag: 'decrypt' }, pink(stacktrace()));
       }
     },
     logging: { arguments: false, return: false },
@@ -323,13 +322,18 @@ function hookCrypto() {
 }
 
 function hookJson(fn?: (key: string, method: string, fallback: () => Java.Wrapper) => any) {
-  const logging = { multiline: false, short: true };
+  const logging = { multiline: false, short: true, call: false, return: false };
   const getOpt = ['get', 'opt'];
   const types = ['Boolean', 'Double', 'Int', 'JSONArray', 'JSONObject', 'Long', 'String'];
   hook(Classes.JSONObject, '$init', {
     loggingPredicate: Filter.json,
     logging: { short: true },
     predicate: (_, index) => index !== 0,
+    before(method, ...args) {
+      if (`${args[0]}` === 'BODY_NULL_BODY') {
+        args[0] = '{}'
+      }
+    }
   });
 
   hook(Classes.JSONObject, 'has', {
@@ -368,7 +372,6 @@ function hookJson(fn?: (key: string, method: string, fallback: () => Java.Wrappe
       });
     }
   }
-  // hook(Classes.JSONObject, 'put')
 }
 
 function hookPrefs(fn?: (key: string, method: string) => any) {
@@ -563,12 +566,17 @@ function bypassReceiverFlags() {
   });
 }
 
+ClassLoader.perform(() => {});
+emitter.on('jnicall', (k) => {
+  logger.info({ tag: 'jnicall' }, k);
+});
+
 Java.performNow(() => {
   const LOCALE = 'BR';
   const TS = Date.now();
   const C4_URL = 'https://google.pl/search?q=hi';
   const AD_ID = 'fwqna41l-mrux-l4pi-mi6q-imrr3t83da4n';
-  const INSTALL_REFERRER = `utm_source=facebook_ads&utm_medium=Non-organic&media_source=true_network&utm_content=Non-organic&http_referrer=BingSearch&utm_campaign=Non-organic&campaign=Non-organic&af_ad=${AD_ID}`;
+  const INSTALL_REFERRER = `utm_source=facebook_ads&utm_medium=Non-organic&media_source=tiktok_s&utm_content=Non-organic&http_referrer=BingSearch&utm_campaign=Non-organic&campaign=Non-organic&af_ad=${AD_ID}`;
   hookActivity();
   hookWebview(true);
   hookNetwork();
@@ -636,6 +644,7 @@ Java.performNow(() => {
       case 'installreferrer':
       case 'refer':
       case 'raw_referrers':
+      case 'referrer':
         return INSTALL_REFERRER;
       case 'userId':
       case 'googleId':
@@ -665,11 +674,10 @@ Java.performNow(() => {
       case 'containsReferrerKey':
       case 'tenjinGoogleInstallContainsRbaivieteferrerKey':
         return false;
-      case 'tLxueOQBY':
-        return C4_URL;
     }
   });
-  let one = false;
+
+  let one = !true;
   hook(Classes.SharedPreferencesImpl$EditorImpl, 'putString', {});
   hookPreferences(() => {});
   hookFirestore();
@@ -684,8 +692,8 @@ Java.performNow(() => {
 
   hook(Classes.Intent, 'getStringExtra', {
     replace(method, key) {
-      if (false) {
-        return C4_URL;
+      if (key === 'openAds' || key === 'oNmRWAuJf') {
+        return '1';
       }
       return method.call(this, key);
     },
@@ -728,10 +736,10 @@ Java.performNow(() => {
   Anticloak.hookNetwork();
   Anticloak.hookAdId(AD_ID);
   Anticloak.hookPackageManager();
-  Anticloak.Country.mock(LOCALE);
-  // Anticloak.InstallReferrer.replace({
-  //   install_referrer: INSTALL_REFERRER,
-  // });
+  // Anticloak.Country.mock(LOCALE);
+  Anticloak.InstallReferrer.replace({
+    install_referrer: INSTALL_REFERRER,
+  });
 
   hook(Classes.SystemProperties, 'get', {
     loggingPredicate: Filter.systemproperties,
@@ -829,9 +837,10 @@ Java.performNow(() => {
     },
   });
 
+  Dump;
+
   const pp = 'com.applovin.sdk.AppLovinInitProvider';
 });
-
 ClassLoader.perform(() => {});
 
 Native.initLibart();
@@ -850,13 +859,13 @@ Process.attachModuleObserver({
       name === 'libmmkv.so' ||
       name === 'libflutter.so' ||
       name === 'libsigner.so' ||
-      name === 'libcocos2djs.so' ||
+      // name === 'libcocos2djs.so' ||
       name === 'ibdB2CB406F37A3.so' ||
       name === 'libdBFB00A6DC21B.so' ||
       name === 'libd47052F4E9E58.so' ||
       name === 'libd3401D2A31E51.so' ||
       name === 'libd79E1FB729E42.so' ||
-      name === 'libd586F624C883B.so' ||
+      name === 'libd97B8EC26D603.so' ||
       name === 'libd882B40CF4232.so' ||
       name === 'libdE9CCDAF38955.so'
     )
@@ -918,8 +927,7 @@ Native.log(Libc.openat, 'isi', { predicate: ProcMaps.inRange });
 //   transform: {
 //     0: (ptr) => tryNull(() => new SoInfo(ptr).getRealpath()) ?? `${ptr}`,
 //     NaN: function (ptr) {
-//       return (
-//         tryNull(() =>
+//       return (  tryNull(() =>
 //;
 // Text.stringify(JSON.parse(JSON.stringify(Process.getModuleByAddress(this.soinfo.getBase())))),
 //         ) ?? `${ptr}`
@@ -937,15 +945,13 @@ Native.log(Libc.openat, 'isi', { predicate: ProcMaps.inRange });
 // });
 
 // Cocos2dx.replace(ptr(0x007ecaf4), 'libcocos2djs.so');
-// Cocos2dx.dump({ name: 'libcocos2djs.so', fn_dump: ptr(0x0079cb08), fn_key: ptr(0x00696830) });
-Cocos2dx.hookLocalStorage(function (key) {
-  logger.info({ tag: 'cocossetlocal' }, `${key} -> ${this.fallback()}`);
-  if (key === 'asmuh') return 'GMT+05:30';
-});
-// Unity.setVersion('6000.0.31f1');
-// Unity.patchSsl();
-// Unity.attachScenes();
-// Unity.attachStrings();
+// Cocos2dx.dump({ name: 'libcocos.so', fn_dump: ptr(0x01a74950), fn_key: ptr(0x01a51a48) });
+// Cocos2dx.hookLocalStorage(function (key) {
+//   logger.info({ tag: 'cocossetlocal' }, `${key} -> ${this.fallback()}`);
+//
+//   if (key === 'agk') return 'https://google.pl/search?q=hi';
+//   if (key === 'asmuh') return 'GMT+05:30';
+// });
 
 // let enabled = fale;
 // setTimeout(() => (enabled = true), 8330);
@@ -959,7 +965,7 @@ Network.attachGetAddrInfo(true);
 Native.System.hookGetauxval();
 Native.System.hookSystem();
 Native.System.hookPopen();
-Native.TheEnd.hook();
+Native.TheEnd.hook(() => {});
 // Interceptor.attach(Libc.vsnprintf, {
 //     onEnter(args) {
 //         this.dst = args[0];
@@ -1034,7 +1040,6 @@ Interceptor.replace(
 //   ),
 // );
 Native.Files.hookRemove(() => true);
-
 // Native.log(Libc.memchr, 'pci', { predicate: ProcMaps.inRange });
 // Interceptor.attach(Libc.memcmp, memcmp);
 // Interceptor.attach(Libc.memmove, memmove);
@@ -1043,7 +1048,8 @@ Native.log(Libc.pthread_create, 'pp2p', {
   predicate: ProcMaps.inRange,
   transform: {
     2: Native.addressOf,
-    NaN: (ptr) => (isNully(ptr) ? `${NULL}` : hexdump(ptr, { length: 0xf, ansi: true, header: false })),
+    [Number.NaN]: (ptr) =>
+      isNully(ptr) ? `${NULL}` : hexdump(ptr, { length: 0xf, ansi: true, header: false }),
   },
 });
 // Native.log(Native.getEnumerated(Process.getModuleByName('libc.so'), '__start_thread'), 'p', {});
@@ -1084,7 +1090,7 @@ Native.replace(Libc.dlsym, 'pointer', ['pointer', 'pointer'], function (s0, i1) 
   return ret;
 });
 
-Native.Time.hookTime(ProcMaps.inRange);
+// Native.Time.hookTime(ProcMaps.inRange);
 Anticloak.Debug.hookPtrace();
 Java.deoptimizeEverything();
 // Dump.hookArtDexFile();
