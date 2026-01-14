@@ -106,6 +106,11 @@ const LibcFinder = {
     const ptr = Module.getGlobalExportByName('lseek');
     return new NativeFunction(ptr, 'pointer', ['int', 'pointer', 'int']);
   },
+  // int fseek(FILE *stream, long offset, int origin);
+  fseek: () => {
+    const ptr = Module.getGlobalExportByName('fseek');
+    return new SystemFunction(ptr, 'int', ['pointer', 'pointer', 'int']);
+  },
   // FILE *fopen(const char *restrict pathname, const char *restrict mode);
   fopen: () => {
     const ptr = Module.getGlobalExportByName('fopen');
@@ -236,7 +241,7 @@ const LibcFinder = {
     return new NativeFunction(ptr, 'int', ['pointer', 'pointer', 'pointer']);
   },
   // propinfo * __system_property_find(char * name);
-  __system_property_find: (name: string) => {
+  __system_property_find: (nareadstring) => {
     const ptr = Module.getGlobalExportByName('__system_property_find');
     return new NativeFunction(ptr, 'pointer', ['pointer']);
   },
@@ -344,6 +349,11 @@ const LibcFinder = {
     const ptr = Module.getGlobalExportByName('pthread_detach');
     return new NativeFunction(ptr, 'int', ['pointer']);
   },
+  // void pthread_exit (void * __retval)
+  pthread_exit: () => {
+    const ptr = Module.getGlobalExportByName('pthread_exit');
+    return new NativeFunction(ptr, 'void', ['pointer']);
+  },
   // char *strstr(const char *haystack, const char *needle);
   strstr: () => {
     const ptr = Module.getGlobalExportByName('strstr');
@@ -433,11 +443,6 @@ const LibcFinder = {
   lstat: () => {
     const ptr = Module.getGlobalExportByName('lstat');
     return new NativeFunction(ptr, 'int', ['pointer', 'pointer']);
-  },
-  // int __statfs64(const char *, size_t, struct statfs *);
-  __statfs64: () => {
-    const ptr = Module.getGlobalExportByName('__statfs64');
-    return new NativeFunction(ptr, 'int', ['pointer', 'int', 'pointer']);
   },
   // time_t time(time_t *t);
   time: () => {

@@ -19,7 +19,7 @@ static void mklog(const char *format, ...) {
   g_free(message);
 }
 
-extern gboolean verbose;;
+extern uint8_t verbose;
 
 void hex_dump(const void *ptr, size_t x) {
   const unsigned char *p = ptr;
@@ -63,9 +63,9 @@ void onEnter(GumInvocationContext *ic) {
   void *retaddr = (void *)gum_invocation_context_get_return_address(ic);
   guint threadId = gum_invocation_context_get_thread_id(ic);
   if (inRange(retaddr) && sprintf((char *) geton(), "%.100s", a1) > 8) {
-    if (verbose) {
-      mklog("%p %p %d %s \x1b[32m%d\x1b[0m", a0, a1, a2, addressOf(retaddr),
-            threadId);
+    if (verbose == 1) {
+      mklog("%p %p %d %s \x1b[32m%d\x1b[0m %d", a0, a1, a2, addressOf(retaddr),
+            threadId, verbose);
       hex_dump(a1, a2 > 1000 ? 1000 : a2);
     } else {
       mklog("%.100s %s", a1, addressOf(retaddr));

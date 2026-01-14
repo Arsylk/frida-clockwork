@@ -18,6 +18,7 @@ export * as Time from './time.js';
 export * as Stalker from './stalker.js';
 export * from './opengl.js';
 export * from './utils.js';
+export * from './select.js';
 const { gray, magenta: pink } = Color.use();
 const mutex = Memory.alloc(Process.pointerSize === 4 ? 24 : 40);
 
@@ -164,7 +165,7 @@ type HookParamteres = {
   tag?: string;
   call?: boolean | ((this: InvocationContext, args: InvocationArguments) => void);
   ret?: boolean | ((this: InvocationContext, retval: InvocationReturnValue) => void);
-  nolog?: true;
+  nolog?: boolean;
   logcat?: boolean;
   base?: NativePointer;
   predicate?: (this: InvocationContext, returnAddress: NativePointer) => boolean;
@@ -281,6 +282,15 @@ function sync(fn: () => void) {
     Libc.pthread_mutex_unlock(mutex);
   }
 }
+
+Object.defineProperties(globalThis, {
+  log: {
+    get: () => log,
+  },
+  addressOf: {
+    get: () => addressOf,
+  },
+});
 
 export {
   attachRegisterNatives,

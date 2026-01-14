@@ -5,7 +5,9 @@ import { JNI } from '../jni.js';
 import { Color, logger } from '@clockwork/logging';
 import { addressOf } from '@clockwork/native';
 import Java from 'frida-java-bridge';
+import { ProcMaps } from '@clockwork/cmodules';
 const { dim, redBright } = Color.use();
+const counterSet = new Map<number, number>();
 
 function getArrayObjectHooks(envWrapper: EnvWrapper): JniHookItems {
   const newHooks = [
@@ -13,6 +15,7 @@ function getArrayObjectHooks(envWrapper: EnvWrapper): JniHookItems {
     [JNI.NewByteArray, 'byte'] as const,
     [JNI.NewCharArray, 'char'] as const,
     [JNI.NewShortArray, 'short'] as const,
+    [JNI.NewIntArray, 'int'] as const,
     [JNI.NewDoubleArray, 'double'] as const,
     [JNI.NewFloatArray, 'float'] as const,
   ].map(([j, typeName]) => {
@@ -41,15 +44,17 @@ function getArrayObjectHooks(envWrapper: EnvWrapper): JniHookItems {
     [JNI.GetByteArrayElements, 'byte'] as const,
     [JNI.GetCharArrayElements, 'char'] as const,
     [JNI.GetShortArrayElements, 'short'] as const,
+    [JNI.GetIntArrayElements, 'int'] as const,
     [JNI.GetDoubleArrayElements, 'double'] as const,
     [JNI.GetFloatArrayElements, 'float'] as const,
   ].map(([j, typeName]) => {
     const fn = function ({ args: [jniEnv, array, isCopy], retval }) {
       if (isNullyVararg(jniEnv, array)) return;
-      const msg = `${Color.className(typeName)}[]: ${vs(retval, `${typeName}[]`, jniEnv)}`;
+      const msg = `${Color.className(typeName)}[]: ${vs(array, `${typeName}[]`, jniEnv)}`;
 
       logger.info(`[${dim(j.name)}] ${msg} ${addressOf(this.returnAddress)}`);
     };
+    return [j.name, fn];
   });
   const elmObjHook = [
     JNI.GetObjectArrayElement.name,
@@ -61,8 +66,16 @@ function getArrayObjectHooks(envWrapper: EnvWrapper): JniHookItems {
       const typeName = refClass ? Java.cast(refClass, Classes.Class).getName() : null;
       const type = typeName ? Color.className(Text.toPrettyType(typeName)) : null;
 
+      const key = Number(this.returnAddress);
+      if (typeName === 'java.lang.Long') {
+        counterSet[key] ??= 0;
+        if ((counterSet[key] += 1) > 100) {
+          return;
+        }
+      }
+
       const value = vs(retval, type ?? undefined, jniEnv);
-      const msg = `${type ?? jarray}[${i}] ${value}`;
+      const msg = `${type ?? jarray}[${Color.number(Number(i))}] = ${value}`;
       logger.info(`[${dim(JNI.GetObjectArrayElement.name)}] ${msg} ${addressOf(this.returnAddress)}`);
     },
   ];

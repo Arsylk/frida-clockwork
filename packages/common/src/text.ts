@@ -67,8 +67,8 @@ const JavaPrimitiveReversed = Object.fromEntries(
   [K in keyof typeof JavaPrimitive as (typeof JavaPrimitive)[K]]: K;
 };
 
-function toPrettyType(type: string): string {
-  const x = JavaPrimitive;
+function toPrettyType(type?: string): string {
+  if (!type) return 'null';
   const len = type.length;
   for (; type.charAt(0) === '['; type = type.substring(1));
   const depth = len - type.length;

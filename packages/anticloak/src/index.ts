@@ -1,4 +1,4 @@
-import { Classes, Text, enumerateMembers, getFindUnique, stacktrace } from '@clockwork/common';
+import { Classes, Text, enumerateMembers, getFindUnique, getRandomInt, stacktrace } from '@clockwork/common';
 import { ClassLoader, Filter, always, hook, ifKey } from '@clockwork/hooks';
 import type { HookParameters } from '@clockwork/hooks/dist/types.js';
 import { buildMapper } from './buildprop.js';
@@ -133,6 +133,8 @@ function hookBatteryManager() {
       switch (`${key}`) {
         case '4': // battery level
           return 73;
+        case '6': // battery current now
+          return -getRandomInt(5, 15);
       }
     }),
     logging: { short: true, multiline: false },
@@ -151,6 +153,13 @@ function hookWindowFlags() {
 }
 
 function hookNetwork() {
+  hook(Classes.NetworkInterface, 'getNetworkInterfaces', {
+    replace(method, ...args) {
+      const vec = Classes.Vector.$new(1);
+      vec.add(Classes.NetworkInterface.$new('nya_interface', 0, [Classes.InetAddress.getLocalHost()]));
+      return vec.elements();
+    },
+  });
   hook(Classes.NetworkInfo, 'getState', {
     replace: () => {
       //@ts-ignore
@@ -162,6 +171,14 @@ function hookNetwork() {
   hook(Classes.NetworkInfo, 'isConnectedOrConnecting', { replace: always(true) });
   hook(Classes.TelephonyManager, 'getSimState', {
     replace: always(5),
+    logging: { multiline: false, short: true },
+  });
+  hook(Classes.TelephonyManager, 'getDataState', {
+    replace: always(2),
+    logging: { multiline: false, short: true },
+  });
+  hook(Classes.TelephonyManager, 'isDataEnabled', {
+    replace: always(true),
     logging: { multiline: false, short: true },
   });
 }

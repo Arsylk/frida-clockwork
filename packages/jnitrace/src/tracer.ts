@@ -1,8 +1,10 @@
 import Java from 'frida-java-bridge';
-import { Classes, ClassesString, enumerateMembers, findClass, isNully } from '@clockwork/common';
+import { Classes, ClassesString, enumerateMembers, findClass, isNully, tryNull } from '@clockwork/common';
 import { asFunction } from './envWrapper.js';
 import { JNI, type jMethodID, type jclass } from './jni.js';
 import { JavaMethod } from './model.js';
+import { getEnumerated } from '@clockwork/native';
+import { logger } from '@clockwork/logging';
 
 const Cache = {
   storage: new Map<string, JavaMethod>(),
@@ -16,6 +18,32 @@ const Cache = {
     (method.isStatic ? this.staticStorage : this.storage).set(key, method);
     return method;
   },
+  getText(jMethodId: jMethodID): string {
+    if (!this.getMethodName) {
+      const libart = Process.getModuleByName('libart.so');
+      const GetMethodNamePtr = getEnumerated(libart, '_ZN3art9ArtMethod20GetRuntimeMethodNameEv');
+      logger.info({ tag: 'GetMethodNamePtr' }, `${GetMethodNamePtr}`);
+      const GetMethodName = new NativeFunction(GetMethodNamePtr, 'pointer', ['pointer']);
+      logger.info({ tag: 'GetMethodName' }, `${GetMethodName}`);
+      let DecodeMethodIdPtr = (Java as any).api['art::jni::JniIdManager::DecodeMethodId'];
+      logger.info({ tag: 'DecodeMethodIdPtr' }, `${DecodeMethodIdPtr}`);
+      DecodeMethodIdPtr ??= getEnumerated(libart, '_ZN3art3jni12JniIdManager14DecodeMethodIdEP10_jmethodID');
+      logger.info({ tag: 'DecodeMethodIdPtr' }, `${DecodeMethodIdPtr}`);
+      const DecodeMethodId = new NativeFunction(DecodeMethodIdPtr, 'pointer', ['pointer']);
+      logger.info({ tag: 'DecodeMethodId' }, `${DecodeMethodId}`);
+      if (!isNully(GetMethodNamePtr) && !isNully(DecodeMethodIdPtr))
+        this.getMethodName = (jMethodId: jMethodID) =>
+          tryNull(() => {
+            const artMth = DecodeMethodId(jMethodId);
+            logger.info({ tag: 'artMth' }, `${artMth}`);
+            const mthName = GetMethodName(artMth);
+            logger.info({ tag: 'mthName' }, `${mthName}`);
+            return mthName.readCString();
+          });
+    }
+    return this.getMethodName?.(jMethodId) ?? `${jMethodId}`;
+  },
+  getMethodName: null,
 };
 
 const PrimitiveTypes: { [key: string]: string } = {

@@ -1,11 +1,13 @@
 #include "glib.h"
 #include <gum/guminterceptor.h>
 
+char *read_fd_path(int fd);
 char *escape_newlines(const char *str, size_t len);
 
+extern long syscall(long number, ...);
 extern char *strstr(const char *haystack, const char *needle);
-extern int sprintf(char *str, const char *format, ...);
-extern int isprint(int ch);
+extern int snprintf(char *s, size_t n, const char *format, ...);
+extern int fileno(FILE *stream);
 extern gboolean inRange(void *ptr);
 extern char *addressOf(void *ptr);
 static void mklog(const char *format, ...);
@@ -21,23 +23,18 @@ static void mklog(const char *format, ...) {
   g_free(message);
 }
 
-extern uint32_t limits[2];
-
 typedef struct _IcState IcState;
 struct _IcState {
   gchar *arg0;
-};
-typedef struct _MemAccessChars MemAccessChars;
-struct _MemAccessChars {
-  gchar r;
-  gchar w;
-  gchar x;
-  gchar p;
+  uint64_t arg1;
+  void *arg2;
 };
 
 void onEnter(GumInvocationContext *ic) {
   IcState *is = GUM_IC_GET_INVOCATION_DATA(ic, IcState);
   is->arg0 = (gchar *)gum_invocation_context_get_nth_argument(ic, 0);
+  is->arg1 = (uint64_t)gum_invocation_context_get_nth_argument(ic, 1);
+  is->arg2 = (void *)gum_invocation_context_get_nth_argument(ic, 2);
 }
 
 void onLeave(GumInvocationContext *ic) {
@@ -45,41 +42,27 @@ void onLeave(GumInvocationContext *ic) {
   size_t retval = GPOINTER_TO_SIZE(gum_invocation_context_get_return_value(ic));
   void *retaddr = (void *)gum_invocation_context_get_return_address(ic);
 
-  if (inRange(retaddr) && retval > limits[0]) {
-    char *fmt = escape_newlines(is->arg0, retval);
-    mklog("\x1b[33m\"%.*s%s\"\x1b[0m ~ \x1b[34m%d\x1b[0m %s", limits[1], fmt,
-          retval > limits[1] ? "..." : "", retval, addressOf(retaddr));
+  if (inRange(retaddr) && is->arg0) {
+    int fd = fileno((FILE *)is->arg2);
+    char *path = read_fd_path(fd);
+    char *fmt = escape_newlines(is->arg0, 200);
+    mklog("\x1b[33m\"%s\"\x1b[0m @ \x1b[35m%s\x1b[0m %s", fmt, path,
+          addressOf(retaddr));
     g_free(fmt);
-    if (strstr(is->arg0, "/apex/com.android.art/lib64/libart.so") &&
-        retval >= 110) {
-      MemAccessChars *mc = (MemAccessChars *)(is->arg0 + 22);
-      mklog("libart.so r:%c w:%c x:%c p:%c %s", mc->r, mc->w, mc->x, mc->p,
-            addressOf(retaddr));
-      mc->r = '-';
-      mc->w = '-';
-      mc->x = '-';
-      mc->p = '-';
-    }
-    if (strstr(is->arg0, "/system/lib64/libselinux.so") && retval >= 100) {
-      MemAccessChars *mc = (MemAccessChars *)(is->arg0 + 22);
-      mklog("libselinux.so r:%c w:%c x:%c p:%c %s", mc->r, mc->w, mc->x, mc->p,
-            addressOf(retaddr));
-      mc->r = '-';
-      mc->w = '-';
-      mc->x = '-';
-      mc->p = '-';
-    }
-    if (strstr(is->arg0, "/system/lib64/libandroid_runtime.so") &&
-        retval >= 108) {
-      MemAccessChars *mc = (MemAccessChars *)(is->arg0 + 22);
-      mklog("libandroid_runtime.so r:%c w:%c x:%c p:%c %s", mc->r, mc->w, mc->x,
-            mc->p, addressOf(retaddr));
-      mc->r = '-';
-      mc->w = '-';
-      mc->x = '-';
-      mc->p = '-';
-    }
+    g_free(path);
   }
+}
+
+char *read_fd_path(int fd) {
+  char strpath[64];
+  snprintf(strpath, sizeof(strpath), "/proc/self/fd/%d", fd);
+
+  size_t bufsize = 4096;
+  char *buf = (char *)g_malloc(bufsize);
+  syscall(78, 0, strpath, buf, bufsize);
+  g_free(strpath);
+
+  return buf;
 }
 
 char *escape_newlines(const char *str, size_t len) {

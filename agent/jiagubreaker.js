@@ -45,14 +45,18 @@ function hardBreakPoint(ptr, fn) {
   Memory.protect(ptr, Process.pointerSize, "---");
 }
 
+const MORELOGS = true;
+const DETACHSELF = true;
+
 const ranges = new Array();
-let found = false;
 const mprots = new Array();
 const dexes = new Map();
 const ents = new Array();
+let found = false;
 
-const libart = Process.getModuleByName("libart.so");
 const linker64 = Process.getModuleByName("linker64");
+const libart = Process.getModuleByName("libart.so");
+const libdex = Process.getModuleByName("libdexfile.so");
 const libc = Process.getModuleByName("libc.so");
 
 const dlopen = new NativeFunction(libc.getExportByName("dlopen"), "pointer", [
@@ -63,25 +67,96 @@ const dlsym = new NativeFunction(libc.getExportByName("dlsym"), "pointer", [
   "pointer",
   "pointer",
 ]);
-
 Interceptor.attach(libc.getExportByName("mprotect"), {
   onEnter(args) {
     if (inRanges(this.returnAddress)) {
       console.log("[mprotect]", args[0], args[1], args[2]);
       this.base = args[0];
       this.size = args[1].toInt32();
+      this.prot = args[2].toInt32();
     }
   },
   onLeave(retval) {
     const base = this.base;
     const size = this.size;
-    if (base && size) {
+    const prot = this.prot;
+    if (base && size && prot & 4) {
       const range = { base: base, size: size };
       mprots.push(range);
       ranges.push(range);
     }
   },
 });
+
+function inithook() {
+  // doing it this way is actually almost required as it is too slow to hook strlen though js
+  const cmodule = new CModule(
+    `
+#include "glib.h"
+#include <gum/guminterceptor.h>
+
+extern char *strstr(const char *haystack, const char *needle);
+extern gboolean inRange(void *ptr);
+extern void frida_log(const gchar *messag, ...);
+
+typedef struct _IcState IcState;
+struct _IcState {
+  gchar *arg0;
+};
+
+void onEnter(GumInvocationContext *ic) {
+  IcState *is = GUM_IC_GET_INVOCATION_DATA(ic, IcState);
+  is->arg0 = (gchar *)gum_invocation_context_get_nth_argument(ic, 0);
+}
+
+void onLeave(GumInvocationContext *ic) {
+  IcState *is = GUM_IC_GET_INVOCATION_DATA(ic, IcState);
+  size_t retval = GPOINTER_TO_SIZE(gum_invocation_context_get_return_value(ic));
+  void *retaddr = (void *)gum_invocation_context_get_return_address(ic);
+
+  if (inRange(retaddr)) {
+    gchar *mc = NULL;
+    if (retval > 100) {
+      if (strstr(is->arg0, "/apex/com.android.art/lib64/libart.so")) {
+        mc = (gchar *)(is->arg0 + 22);
+      }
+      if (strstr(is->arg0, "/system/lib64/libselinux.so")) {
+        mc = (gchar *)(is->arg0 + 22);
+      }
+      if (strstr(is->arg0, "/system/lib64/libandroid_runtime.so")) {
+        mc = (gchar *)(is->arg0 + 22);
+      }
+      if (mc != NULL) {
+        frida_log(is->arg0);
+        mc[0] = '-';
+        mc[1] = '-';
+        mc[2] = '-';
+        mc[3] = '-';
+      }
+    }
+  }
+}
+`,
+    {
+      strstr: libc.getExportByName("strstr"),
+      inRange: new NativeCallback(
+        function (ptr) {
+          return inRanges(ptr) ? 1 : 0;
+        },
+        "bool",
+        ["pointer"]
+      ),
+      frida_log: new NativeCallback(
+        function (ptr) {
+          console.log("[strlen]", ptr.readCString());
+        },
+        "void",
+        ["pointer"]
+      ),
+    }
+  );
+  Interceptor.attach(libc.getExportByName("strlen"), cmodule);
+}
 
 const libdl = Process.getModuleByName("libdl.so");
 Interceptor.attach(libdl.getExportByName("dlopen"), {
@@ -108,9 +183,8 @@ Process.attachModuleObserver({
       `{ name: ${name}, base: ${base}, size: ${size}, path: ${path} }`
     );
     if (name === "base.odex") {
-      hookdex(libart);
       hookhide(linker64, (name) => {
-        for (const target of ["frida", "memfd", "libart.so", "libdl.so"]) {
+        for (const target of ["frida", "memfd"]) {
           if (name.includes(target)) {
             return true;
           }
@@ -119,58 +193,61 @@ Process.attachModuleObserver({
       });
       ranges.push({ base: base, size: size });
     }
-    if (name.includes("libjiagu") || name.includes("l02e9294c")) {
+    if (name.includes("jiagu")) {
       ranges.push({ base: base, size: size });
 
-      const getEnumeratedAll = (module, fn) => {
-        const b = [];
-        for (const ex of module.enumerateExports()) {
-          if (fn(ex)) {
-            b.push(ex);
+      // this is basically cosmetic logs, but they make it a bit less stable
+      if (MORELOGS) {
+        const getEnumeratedAll = (module, fn) => {
+          const b = [];
+          for (const ex of module.enumerateExports()) {
+            if (fn(ex)) {
+              b.push(ex);
+            }
           }
-        }
-        return b;
-      };
-      ents.push(
-        ...getEnumeratedAll(
-          module,
-          ({ name }) =>
-            (name !== "_ULaarch64_local_addr_space" &&
-              name.includes("aarch64")) ||
-            name.includes("interpreter")
-        )
-      );
+          return b;
+        };
+        ents.push(
+          ...getEnumeratedAll(
+            module,
+            ({ name }) =>
+              (name !== "_ULaarch64_local_addr_space" &&
+                name.includes("aarch64")) ||
+              name.includes("interpreter")
+          )
+        );
 
-      let uq = 0;
-      for (const ent of ents) {
-        const { address: addr, name } = ent;
-        try {
-          Interceptor.attach(addr, {
-            onEnter(args) {
-              const getAt = (i) =>
-                tryOrNull(() =>
-                  args[i].sub(base) >= 0 && args[i].sub(base) <= size
-                    ? args[i].sub(base)
-                    : args[i]
+        let uq = 0;
+        for (const ent of ents) {
+          const { address: addr, name } = ent;
+          try {
+            Interceptor.attach(addr, {
+              onEnter(args) {
+                const getAt = (i) =>
+                  tryOrNull(() =>
+                    args[i].sub(base) >= 0 && args[i].sub(base) <= size
+                      ? args[i].sub(base)
+                      : args[i]
+                  );
+                console.log(
+                  `[${name}]:${(this.uq = ++uq)} call(${getAt(0)}, ${getAt(
+                    1
+                  )}, ${getAt(2)}, ${getAt(3)})`,
+                  `${this.returnAddress.sub(base)}`
                 );
-              console.log(
-                `[${name}]:${(this.uq = ++uq)} call(${getAt(0)}, ${getAt(
-                  1
-                )}, ${getAt(2)}, ${getAt(3)})`,
-                `${this.returnAddress.sub(base)}`
-              );
-            },
-            onLeave(retval) {
-              console.log(
-                `[${name}]:${this.uq} return ${retval}`,
-                `${this.returnAddress.sub(base)}`
-              );
-              if ([18, 20, 28, 34].includes(this.uq)) retval.replace(ptr(0x0));
-            },
-          });
-          // console.log(`${addr} ${name} OK`);
-        } catch (e) {
-          // console.log(`${addr} ${name} ${e}`);
+              },
+              onLeave(retval) {
+                console.log(
+                  `[${name}]:${this.uq} return ${retval}`,
+                  `${this.returnAddress.sub(base)}`
+                );
+                // if ([18, 20, 28, 34].includes(this.uq)) retval.replace(ptr(0x0));
+              },
+            });
+            // console.log(`${addr} ${name} OK`);
+          } catch (e) {
+            // console.log(`${addr} ${name} ${e}`);
+          }
         }
       }
     }
@@ -205,27 +282,36 @@ function hookmore(name) {
           const op = inst.operands[0];
           const f = ptr(`${op.value}`);
           console.log("[memfound]", `${inst.address} ${inst} ${f}`);
-          Interceptor.attach(f, {
-            onEnter(args) {
-              this.handle = args[0];
-              this.symbol = args[1].readCString();
-            },
-            onLeave(retval) {
-              let newval = ptr(0x0);
-              if (this.symbol === "mprotect") {
-                newval = retval;
-              }
-              console.log(
-                `[${f.sub(range.base)}]`,
-                `${this.symbol} = ${retval} | ${newval}`
-              );
-              retval.replace(newval);
-              Interceptor.attach(retval, {
-                onEnter: console.log,
-                onLeave: console.log,
-              });
-            },
-          });
+          let finalhook;
+          finalhook = () => {
+            Interceptor.attach(f, {
+              onEnter(args) {
+                this.handle = args[0];
+                this.symbol = args[1].readCString();
+              },
+              onLeave(retval) {
+                let newval = ptr(0x0);
+                // const sym = DebugSymbol.fromName(this.symbol);
+                // if (sym) newval = sym.address;
+                if (this.symbol === "mprotect") {
+                  newval = retval;
+                  // this is to save on execution speed and potential crashes, only rehook whats needed
+                  if (DETACHSELF) {
+                    Interceptor.detachAll();
+                    Interceptor.flush();
+                    inithook();
+                    finalhook();
+                  }
+                }
+                console.log(
+                  `[${f.sub(range.base)}]`,
+                  `${this.symbol} = ${retval} | ${newval}`
+                );
+                retval.replace(newval);
+              },
+            });
+          };
+          finalhook();
           break;
         }
       } catch {}
@@ -234,73 +320,40 @@ function hookmore(name) {
   }
 }
 
-function hookdex(libart) {
-  const symbol =
-    "_ZN3art11ClassLinker11DefineClassEPNS_6ThreadEPKcmNS_6HandleINS_6mirror11ClassLoaderEEERKNS_7DexFileERKNS_3dex8ClassDefE";
-  let dex = getEnumerated(libart, symbol);
-  if (dex === NULL) {
-    console.log("[dex]", "failed to find symbol");
-    return;
+function hookhide(linker, predicate) {
+  const solist_get_head = new NativeFunction(
+    getEnumerated(linker, "__dl__Z15solist_get_headv"),
+    "pointer",
+    []
+  );
+  const soinfo_get_soname = new NativeFunction(
+    getEnumerated(linker, "__dl__ZNK6soinfo10get_sonameEv"),
+    "pointer",
+    ["pointer"]
+  );
+  const soinfo_get_realpath = new NativeFunction(
+    getEnumerated(linker, "__dl__ZNK6soinfo12get_realpathEv"),
+    "pointer",
+    ["pointer"]
+  );
 
-    Interceptor.attach(dex, {
-      onEnter(args) {
-        const dexfile = args[5];
-        const base = dexfile.add(Process.pointerSize).readPointer();
-        const size = dexfile.add(Process.pointerSize * 2).readUInt();
-        if (dexes.has(`${base}`)) return;
-        dexes.set(`${base}`, size);
-        console.log(
-          "[dex]",
-          `${base.readCString(4).replace("\n", "\\n")} ${size}`
-        );
-        Memory.protect(base, size, "r");
-        const pkgbarr = File.readAllBytes("/proc/self/cmdline");
-        let pkg = "";
-        for (const b of new Uint8Array(pkgbarr)) {
-          if (b === 0x0) break;
-          pkg += String.fromCharCode(b);
-        }
-        const file = `/data/data/${pkg}/classes_${base}.dex`;
-        File.writeAllBytes(file, base.readByteArray(size));
-        console.log("[dex]", `saved ${file}`);
-      },
-    });
-  }
-
-  function hookhide(linker, predicate) {
-    const solist_get_head = new NativeFunction(
-      getEnumerated(linker, "__dl__Z15solist_get_headv"),
-      "pointer",
-      []
-    );
-    const soinfo_get_soname = new NativeFunction(
-      getEnumerated(linker, "__dl__ZNK6soinfo10get_sonameEv"),
-      "pointer",
-      ["pointer"]
-    );
-    const soinfo_get_realpath = new NativeFunction(
-      getEnumerated(linker, "__dl__ZNK6soinfo12get_realpathEv"),
-      "pointer",
-      ["pointer"]
-    );
-
-    const nextoff = Process.pointerSize * 5;
-    let item = solist_get_head();
-    let prev = null;
-    while (`${item}` !== "0x0") {
-      const name = soinfo_get_soname(item).readCString();
-      const path = soinfo_get_realpath(item).readCString();
-      const next = item.add(nextoff).readPointer();
-      if (predicate(name) || predicate(path)) {
-        const nptr = prev?.add(nextoff);
-        Memory.protect(nptr, Process.pointerSize, "rwx");
-        nptr?.writePointer(next);
-        console.log("[linkskip]", name, path);
-      }
-      prev = item;
-      item = next;
+  const nextoff = Process.pointerSize * 5;
+  let item = solist_get_head();
+  let prev = null;
+  while (`${item}` !== "0x0") {
+    const name = soinfo_get_soname(item).readCString();
+    const path = soinfo_get_realpath(item).readCString();
+    const next = item.add(nextoff).readPointer();
+    if (predicate(name) || predicate(path)) {
+      const nptr = prev?.add(nextoff);
+      Memory.protect(nptr, Process.pointerSize, "rwx");
+      nptr?.writePointer(next);
+      console.log("[linkskip]", name, path);
     }
+    prev = item;
+    item = next;
   }
 }
 
 console.log("[processid]", Process.id);
+inithook();

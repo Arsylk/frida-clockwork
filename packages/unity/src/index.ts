@@ -43,8 +43,9 @@ function attachStrings() {
             const this0 = !_this0.isNull() ? _this0.content : null;
             const _arg0 = new Il2Cpp.String(args[0] as NativePointer);
             const arg0 = !_arg0.isNull() ? _arg0.content : null;
-            console.log(`${m.class.fullName}::${m.name}(this0="${this0}", arg0="${arg0}")`);
-            return true;
+            logger.info({ tag: 'unity' }, `${m.class.fullName}::${m.name}(this0="${this0}", arg0="${arg0}")`);
+            if (arg0 === '0') return false;
+            return this0 === arg0;
           };
         }
       }
@@ -83,6 +84,7 @@ function attachStrings() {
       .filterClasses((kclass) => kclass.name === 'String')
       .filterMethods(
         (m) =>
+          !(m.name === 'Equals' && !m.isStatic) &&
           !m.name.includes('get_Chars') &&
           !m.name.includes('FastAllocateString') &&
           // !m.name.includes('FillStringChecked') &&
@@ -107,6 +109,21 @@ function attachScenes() {
       .attach();
   });
 }
+
+function attachCrypto() {
+  Il2Cpp.perform(() => {
+    const CoreModule = Il2Cpp.corlib.assembly;
+    Il2Cpp.trace(true)
+      .assemblies(CoreModule)
+      .filterClasses(
+        (kclass) =>
+          kclass.fullName.includes('System.Security.Cryptography.') && kclass.fullName.includes('Aes'),
+      )
+      .and()
+      .attach();
+  });
+}
+attachCrypto();
 
 function unitypatchSsl() {
   Il2Cpp.perform(() => {

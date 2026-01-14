@@ -4,6 +4,7 @@ import { JniHookItems, JniHookItemsObject } from '../hooks.js';
 import { JNI } from '../jni.js';
 import { Color, logger } from '@clockwork/logging';
 import { addressOf } from '@clockwork/native';
+import Java from 'frida-java-bridge';
 const { dim } = Color.use();
 
 function getStringHooks(envWrapper: EnvWrapper): JniHookItems {
@@ -28,8 +29,8 @@ function getStringHooks(envWrapper: EnvWrapper): JniHookItems {
       logger.info(`[${dim(JNI.NewStringUTF.name)}] ${msg} ${addressOf(this.returnAddress)}`);
     },
     NewString: function ({ args: [jniEnv, string], retval }) {
-      if (isNullyVararg(jniEnv, string)) return;
-      const msg = `${Color.string(string.readCString())}`;
+      if (isNullyVararg(jniEnv, string, retval)) return;
+      const msg = `${Color.string(Java.cast(retval, Classes.String))}`;
       logger.info(`[${dim(JNI.NewString.name)}] ${msg} ${addressOf(this.returnAddress)}`);
     },
     GetStringUTFLength: function ({ args: [jniEnv, string], retval }) {

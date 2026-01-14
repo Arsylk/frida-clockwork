@@ -1,6 +1,6 @@
-import { Classes, stacktrace, Text, tryNull } from '@clockwork/common';
+import { Classes, ClassesString, Text, tryNull } from '@clockwork/common';
 import { Filter, always, hook } from '@clockwork/hooks';
-import { logger } from '@clockwork/logging';
+import Java from 'frida-java-bridge';
 
 type Config = {
   timezoneId: string;
@@ -145,7 +145,6 @@ function mock(key: keyof typeof Configurations): void;
 function mock(config: Config): void;
 function mock(keyOrConfig: Config | keyof typeof Configurations) {
   const config = typeof keyOrConfig === 'object' ? (keyOrConfig as Config) : Configurations[keyOrConfig];
-
   const number = `${config.code}${Text.stringNumber(10)}`;
   const mccmnc = `${config.mcc}${config.mnc}`;
   const subscriber = `${mccmnc}${Text.stringNumber(15 - mccmnc.length)}`;
@@ -184,10 +183,17 @@ function mock(keyOrConfig: Config | keyof typeof Configurations) {
     },
     logging: { call: false, return: false },
   });
-  // hook(Classes.Locale, 'getCountry', { replace: always('BR'), logging: { call: false, return: false } });
-  // hook(Classes.Locale, 'getLanguage', { replace: always('pt'), logging: { call: false, return: false } });
-  // hook(Classes.Locale, 'getDisplayCountry', { replace: always('Brazil'), logging: { call: false, return: false } });
-  // hook(Classes.Locale, 'toString', { replace: always('pt_BR'), logging: { call: false, return: false } });
+
+  for (const mth of ['getDefault', 'getAdjustedDefault']) {
+    hook(Classes.LocaleList, mth, {
+      replace(method, ...args) {
+        const cls = tryNull(() => Classes.Locale.$new(config.locale[1], config.locale[0]));
+        const target = cls ?? Classes.Locale.getDefault();
+        return Classes.LocaleList.$new(Java.array(ClassesString.Locale, [target]));
+      },
+      logging: { call: false, return: false },
+    });
+  }
 
   hook(Classes.Resources, 'getConfiguration', {
     after(method, returnValue, ...args) {
@@ -226,6 +232,25 @@ function mock(keyOrConfig: Config | keyof typeof Configurations) {
       return returnValue;
     },
   });
+
+  const SkuClass = findClass(ClassesString.SkuDetails);
+  if (SkuClass) {
+    hook(SkuClass, 'getPriceCurrencyCode', {
+      replace(method, ...args) {
+        let code = method.call(this, ...args);
+        try {
+          const cls = tryNull(() => Classes.Locale.$new(config.locale[1], config.locale[0]));
+          const target = cls ?? Classes.Locale.getDefault();
+          const currency = Classes.Currency.getInstance(target);
+          if (currency && `${currency.getDisplayName()}` !== '') {
+            code = currency.getCurrencyCode();
+          }
+        } finally {
+          return code;
+        }
+      },
+    });
+  }
 }
 
 export { mock };

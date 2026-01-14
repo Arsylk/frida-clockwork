@@ -3,6 +3,7 @@ import { logger } from '@clockwork/logging';
 import _strlen from '@src/strlen.c';
 import _memcmp from '@src/memcmp.c';
 import _memmove from '@src/memmove.c';
+import _fgets from '@src/fgets.c';
 import _procmaps from '@src/procmaps.c';
 import _inject from '@src/inject.c';
 import _elfheader from '@src/elfheader.c';
@@ -38,7 +39,8 @@ function fbase64(input: string) {
   return base64(fixed);
 }
 
-function callback<T extends CModule>(cmodule: T) {
+function callback<T extends CModule>(cmodule: T, init?: (cmodule: T) => void) {
+  init?.(cmodule);
   return cmodule as T & InvocationListenerCallbacks;
 }
 
@@ -139,7 +141,10 @@ namespace ProcMaps {
 namespace ElfHeader {
   export const cm = new CModule(fbase64(_elfheader), {
     frida_log: get_frida_log('procmaps'),
+    stat: Libc.stat,
     fopen: Libc.fopen,
+    fseek: Libc.fseek,
+    fread: Libc.fread,
     sscanf: Libc.sscanf,
     strstr: Libc.strstr,
     malloc: Libc.malloc,
@@ -210,14 +215,32 @@ namespace ElfHeader {
 //     }
 // }
 
+const fgets = callback(
+  new CModule(fbase64(_fgets), {
+    frida_log: get_frida_log('fgets'),
+    syscall: Libc.syscall,
+    snprintf: Libc.snprintf,
+    strstr: Libc.strstr,
+    fileno: Libc.fileno,
+    inRange: ProcMaps.cm.inRange,
+    addressOf: ProcMaps.cm.addressOf,
+  }),
+);
+
 const strlen = callback(
   new CModule(fbase64(_strlen), {
     frida_log: get_frida_log('strlen'),
+    strstr: Libc.strstr,
     sprintf: Libc.sprintf,
     isprint: Libc.isprint,
     inRange: ProcMaps.cm.inRange,
     addressOf: ProcMaps.cm.addressOf,
+    limits: Memory.alloc(4 * 2),
   }),
+  (cm) => {
+    cm.limits.writeU32(0);
+    cm.limits.add(0x4).writeU32(160);
+  },
 );
 
 const memcmp = callback(
@@ -256,4 +279,4 @@ Object.defineProperties(globalThis, {
   },
 });
 
-export { strlen, memcmp, memmove, ElfHeader, ProcMaps, fbase64, LinkerSym };
+export { strlen, fgets, memcmp, memmove, ElfHeader, ProcMaps, fbase64, LinkerSym };

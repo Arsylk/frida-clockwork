@@ -1,4 +1,4 @@
-import { ElfHeader, LinkerSym, memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
+import { ElfHeader, fgets, LinkerSym, memcmp, memmove, ProcMaps, strlen } from '@clockwork/cmodules';
 import * as Unity from '@clockwork/unity';
 
 import { ClassLoader, Filter, always, compat, findHook, getHookUnique, hook, ifKey } from '@clockwork/hooks';
@@ -31,6 +31,7 @@ import {
   Pthread,
   readFdPath,
   replace,
+  select,
   Stalker as StalkerKt,
   TheEnd,
 } from '@clockwork/native';
@@ -101,22 +102,23 @@ log(libdl.getExportByName('dlsym'), 'ps', {
     this.text = args[1].readCString();
   },
   ret(retval) {
-    const text = this.text;
-    const newret = new NativeCallback(
-      function () {
-        logger.info({ tag: 'dlsym', id: text }, `${addressOf(this.returnAddress)}`);
-        return ptr(0x0);
-      },
-      'pointer',
-      [],
-    );
-    retval.replace(newret);
+    // const text = this.text;
+    // const newret = new NativeCallback(
+    //   function () {
+    //     logger.info({ tag: 'dlsym', id: text }, `${addressOf(this.returnAddress)}`);
+    //     return ptr(0x0);
+    //   },
+    //   'pointer',
+    //   [],
+    // );
+    // retval.replace(newret);
   },
 });
 log(libdl.getExportByName('dladdr'), 'p1', {
   call(args) {
     ProcMaps.printStacktrace(this.context);
   },
+
   predicate: ProcMaps.inRange,
   transform: {
     1: (x) => addressOf(x),
@@ -181,7 +183,7 @@ log(libc.getExportByName('fstat'), '0p', {
   transform: { 0: (x) => readFdPath(x.toInt32()) ?? `${x}` },
 });
 log(libc.getExportByName('printf'), 'si', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('sprintf'), 'ssi', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('sprintf'), 'ssi', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('time'), 'p', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('setenv'), 'ss', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('mkdir'), 'si', { predicate: ProcMaps.inRange });
@@ -195,7 +197,7 @@ log(libc.getExportByName('strcpy'), 'ss', { predicate: ProcMaps.inRange, ret: fa
 log(libc.getExportByName('strchr'), 'si', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('strtok'), 's', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('strcat'), 'ss', { call: true, ret: false, predicate: ProcMaps.inRange });
-log(libc.getExportByName('strcmp'), 'ssu', {
+log(libc.getExportByName('strcmp'), 'ss', {
   predicate: ProcMaps.inRange,
   call(args) {
     this.arg0 = args[0].readCString();
@@ -209,7 +211,6 @@ log(libc.getExportByName('strcmp'), 'ssu', {
 });
 
 log(libc.getExportByName('strstr'), 'ss', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('strlen'), 's', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('strdup'), 's', { predicate: ProcMaps.inRange });
 // log(libc.getExportByName('syscall'), 'i', {
 //   predicate: ProcMaps.inRange,
@@ -225,6 +226,8 @@ log(libc.getExportByName('strdup'), 's', { predicate: ProcMaps.inRange });
 // });
 log(libc.getExportByName('prctl'), 'pp', { predicate: ProcMaps.inRange });
 
+log(libc.getExportByName('execv'), 'sp', { predicate: ProcMaps.inRange });
+log(libc.getExportByName('execvp'), 'sp', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('fork'), '', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('pthread_kill'), 'p', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('pthread_detach'), 'p', { predicate: ProcMaps.inRange });
@@ -242,33 +245,33 @@ log(libc.getExportByName('access'), 's', {
     // }
   },
 });
-log(libc.getExportByName('fopen'), 'si', {
-  predicate: ProcMaps.inRange,
-  call(args) {
-    ProcMaps.printStacktrace(this.context);
-    const path = args[0].readCString();
-    if (path?.includes('/maps')) {
-      args[0] = Memory.allocUtf8String('/dev/null');
-    }
-    if (path.endsWith('/libc.so')) {
-      const newpath = `${getSelfFiles()}/fakelibc.so`;
-      const bytesto = libc.base.readByteArray(libc.size);
-      File.writeAllBytes(newpath, bytesto);
-      args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
-    }
-    if (args[0].readCString()?.includes('/cmdline')) {
-      args[0] = Memory.allocUtf8String('/dev/null');
-    }
-    if (args[0].readCString()?.includes('/libc.so')) {
-      args[0] = Memory.allocUtf8String('/dev/null');
-    }
-  },
-});
-log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
-log(libc.getExportByName('open64'), 'si', {
-  predicate: ProcMaps.inRange,
-});
-log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('fopen'), 'si', {
+//   predicate: ProcMaps.inRange,
+//   call(args) {
+//     ProcMaps.printStacktrace(this.context);
+//     const path = args[0].readCString();
+//     if (path?.includes('  self/maps')) {
+//       args[0] = Memory.allocUtf8String('/dev/null');
+//     }
+//     if (path.endsWith('/libc.so')) {
+//       const newpath = `${getSelfFiles()}/fakelibc.so`;
+//       const bytesto = libc.base.readByteArray(libc.size);
+//       File.writeAllBytes(newpath, bytesto);
+//       args[0] = Memory.allocUtf8String(`/data/data/${getSelfProcessName()}/fakelibc`);
+//     }
+//     if (args[0].readCString()?.includes('/cmdline')) {
+//       args[0] = Memory.allocUtf8String('/dev/null');
+//     }
+//     if (args[0].readCString()?.includes('/libc.so')) {
+//       args[0] = Memory.allocUtf8String('/dev/null');
+//     }
+//   },
+// });
+// log(libc.getExportByName('openat'), 'isi', { predicate: ProcMaps.inRange });
+// log(libc.getExportByName('open64'), 'si', {
+//   predicate: ProcMaps.inRange,
+// });
+// log(libc.getExportByName('__open_2'), 'si', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('sigfillset'), 'pp', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('setpgid'), 'pp', { predicate: ProcMaps.inRange });
 log(libc.getExportByName('lstat'), 'sp', { predicate: ProcMaps.inRange });
@@ -279,18 +282,18 @@ log(libc.getExportByName('lseek'), '0p2', {
     2: (ptr) => Consts.whence[ptr.toInt32()],
   },
 });
-log(libc.getExportByName('read'), '0pi', {
-  predicate: ProcMaps.inRange,
-  call(args) {
-    this.a1 = args[1];
-  },
-  transform: {
-    0: (x) => readFdPath(x.toInt32()) ?? `${x}`,
-    NaN: function (ptr) {
-      return hexdump(this.a1, { length: Math.min(ptr.toInt32(), 0x100) });
-    },
-  },
-});
+// log(libc.getExportByName('read'), '0pi', {
+//   predicate: ProcMaps.inRange,
+//   call(args) {
+//     this.a1 = args[1];
+//   },
+//   transform: {
+//     0: (x) => readFdPath(x.toInt32()) ?? `${x}`,
+//     NaN: function (ptr) {
+//       return hexdump(this.a1, { length: Math.min(ptr.toInt32(), 0x100) });
+//     },
+//   },
+// });
 // Interceptor.replace(
 //   libc.getExportByName('remove'),
 //   new NativeCallback(
@@ -317,28 +320,49 @@ log(libc.getExportByName('read'), '0pi', {
 // hookPtrace();
 // TheEnd.hook();
 
+select([], true);
 attach((x) => ProcMaps.inRange(x.returnAddress), true);
+// memmove.verbose.writeByteArray([0x1]);
 Interceptor.attach(Libc.memmove, memmove);
 Interceptor.attach(Libc.memcmp, memcmp);
+Interceptor.attach(Libc.strlen, strlen);
+// log(Libc.strlen, '', {
+//   predicate: ProcMaps.inRange,
+//   nolog: true,
+//   call(args) {
+//     this.arg0 = args[0];
+//   },
+//   ret(retval) {
+//     const str = this.arg0.readCString(Math.min(retval.toInt32(), 120));
+//     if (
+//       str &&
+//       (str.indexOf('/apex/com.android.art/lib64/libart.so') === 73 ||
+//         str.indexOf('/system/lib64/libselinux.so') === 73 ||
+//         str.indexOf('/system/lib64/libandroid_runtime.so') === 73)
+//     ) {
+//       this.arg0
+//         .add(22)
+//         .writeByteArray(['-'.charCodeAt(0), '-'.charCodeAt(0), '-'.charCodeAt(0), '-'.charCodeAt(0)]);
+//     }
+//   },
+// });
 
-injectNative();
-injectSsl();
-ClassLoader.perform(() => {
-  uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
-  uniqHook(ClassesString.DexPathList, '$init', {
-    logging: { short: true, multiline: false },
-  });
-});
-mock('IN');
+// injectNative();
+// injectSsl();
+// ClassLoader.perform(() => {
+//   uniqHook(ClassesString.File, 'delete' /*{ replace: always(true) }*/);
+//   uniqHook(ClassesString.DexPathList, '$init', {
+//     logging: { short: true, multiline: false },
+//   });
+// });
+// mock('IN');
 Java.performNow(() => {
   for (const cls of [Classes.SharedPreferencesImpl, Classes.Bundle]) {
-    for (const str of ['getInt', 'getString', 'getBoolean']) {
-      console.log('ninti', str);
+    for (const str of ['getLong', 'getInt', 'getString', 'getBoolean']) {
       hook(cls, str, {
         replace: ifKey(function (arg) {
-          if (`${arg}`.includes('aaaaaa')) {
-            console.log('pass');
-            return '%7B%22nIAy%2o2%3A%22mhhgn%22%2C%22iznoaTttP%22%3A%22%22%2C%22IxZtJ%22%3A%22kuiviO%22%2C%22kCPtFvZp%22%3A1%7D';
+          if (arg === 'plugged') {
+            return 0;
           }
         }),
       });
@@ -346,37 +370,20 @@ Java.performNow(() => {
   }
 });
 
-log(libc.getExportByName('mprotect'), 'pi2', {
-  nolog: true,
-  predicate: ProcMaps.inRange,
-  transform: { 2: Consts.prot },
+log(libdl.getExportByName('dlopen'), 'si', {
   call(args) {
-    this.base = args[0];
-    this.size = args[1].toInt32();
+    const name = args[0].readCString();
+    this.name = name;
   },
   ret(retval) {
-    if (this.arg2 & 4) {
-      const range = { base: this.base, size: this.size };
-      mprots.push(range);
-      ProcMaps.addRange(range);
+    const name = this.name;
+    if (name?.includes('libjiagu')) {
+      if (!found) {
+        hookmore(name);
+      }
     }
   },
 });
-
-// log(libdl.getExportByName('dlopen'), 'si', {
-//   call(args) {
-//     const name = args[0].readCString();
-//     this.name = name;
-//   },
-//   ret(retval) {
-//     const name = this.name;
-//     if (name) {
-//       if (!found) {
-//         // hookmore(name);
-//       }
-//     }
-//   },
-// });
 
 let found = false;
 const mprots = new Array<{ base: NativePointer; size: number }>();
@@ -391,24 +398,7 @@ Process.attachModuleObserver({
   onAdded(module) {
     const { base, name, size, path } = module;
 
-    if (
-      !path.includes(Reflect.get(globalThis, 'packageName')) ||
-      name === 'libmonochrome_64.so' ||
-      name === 'libunity.so' ||
-      name === 'libil2cpp.so' ||
-      name === 'libandroid.so' ||
-      name === 'libhwui.so' ||
-      name === 'libsigner.so' ||
-      name === 'libswappywrapper.so' ||
-      name === 'libnms.so' ||
-      name === 'libmmkv.so' ||
-      name === 'ibdB2CB406F37A3.so' ||
-      name === 'libd47052F4E9E58.so' ||
-      name === 'libflutter.so' ||
-      name === 'libtobEmbedPagEncrypt.so' ||
-      name === 'libapminsighta.so'
-    )
-      return;
+    if (!path.includes(Reflect.get(globalThis, 'packageName'))) return;
     if (name === 'base.odex') {
       Linker.patchSoList((name) => {
         for (const t of ['frida', 'memfd', 'libart.so', 'libdl.so']) {
@@ -416,76 +406,22 @@ Process.attachModuleObserver({
         }
         return false;
       });
+      return;
     }
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size, path: path })}`);
-    if (name.includes('libtaietwl.so')) {
-      log(base.add(0xe8c8), '', { tag: '__start_routine' });
-      log(base.add(0x11d6c), 'pp');
-      log(base.add(0xd07c), 'pp', { tag: 'set_phdr_protections' });
-      log(base.add(0x363d4), 'pp', { tag: 'apply_relocs_and_search_deps' });
-      // log(base.add(0xa890), 'pp', {
-      //   tag: 'exec_encoded_function_calls',
-      //   call(args) {
-      //     const size = args[1].toInt32();
-      //     const int64s = new Uint8Array(args[0].readByteArray(size));
-      //     console.log(int64s.join(', '));
-      //   },
-      // });
-      log(base.add(0xd378), 'pp', {
-        tag: 'decrypt_and_assign',
-        ret(retval) {
-          const base = this.arg0.add(0x50);
-          const size = Number(this.arg1.add(0x18).readU64());
-          logger.info({ tag: '0xd378' }, `e_phnum: ${this.arg0.add(0x48).readS16()} size: ${size}`);
-          logger.info({ tag: '0xd378' }, `${hexdump(base)}`);
-
-          const file = `${getSelfFiles()}/0xd378_${base}.so`;
-          const ptr = base;
-          // if (!Memory.protect(ptr, size, 'rwx')) {
-          //   if (!Memory.protect(ptr, size, 'r')) {
-          //     for (let r = ptr; r < base.add(size); r = r.add(Process.pageSize)) {
-          //       console.log(r);
-          //       Memory.protect(r, Process.pageSize, 'r');
-          //     }
-          //   }
-          // }
+    if (name.includes('64')) {
+      log(module.base.add(0x6208), '0ip', {
+        transform: {
+          0: function (p) {
+            return hexdump(p, { length: this.arg1, ansi: true, header: true });
+          },
         },
       });
-      log(base.add(0xcec0), 'pp', { tag: 'alloc_relocation_memory', call(args) {} });
-      log(base.add(0xb6d8), 'pp', {
-        tag: 'parse_and_load_dynamic_sectioin',
+      log(module.base.add(0x403c), 'p', {
         call(args) {
-          const path = args[0].add(0x58).readCString();
-          const base = args[0].add(0x190).readPointer();
-          const dyn = args[0].add(0x100).readPointer();
-          const phdr = args[0].add(0xe8).readPointer();
-          const phdr_count = Number(args[0].add(0xf8).readLong());
-
-          const diff = Number(base.sub(module.base));
-          logger.info({ tag: 'diff' }, `${path} ${diff}`);
-          logger.info({ tag: 'dynamic' }, hexdump(base));
-
-          for (let i = 0; i < phdr_count; i += 1) {
-            const phdrr = phdr.add(i * 0x38);
-            const p_ = Struct.Elf.phdr(phdrr);
-            logger.info({ tag: 'phdr' }, `${i} ${Text.stringify(Struct.toObject(p_))}`);
-          }
-
-          let dc = 0;
-          while (true) {
-            const dynn = dyn.add(dc++ * 0x10);
-            const d_tag = Number(dynn.readS64());
-            const d_un = dynn.add(0x8).readPointer();
-            logger.info({ tag: 'dyn' }, `d_tag: ${Consts.d_tag(d_tag)} d_un: ${d_un}`);
-            if (d_tag === 0x0) break;
-          }
-          // const file = `${getSelfFiles()}/base_${base}`;
-          // logger.info({ tag: 'writetofile' }, file);
-          // File.writeAllBytes(file, base.readByteArray(module.size - diff));
+          const dyns = args[0].add(0x20);
         },
       });
-      log(base.add(0xd660), 'pppp', { tag: 'find_dynamic_phdr' });
-      log(base.add(0xd790), 'pph');
     }
   },
 });
@@ -509,17 +445,14 @@ function hookmore(name: string) {
           const f = ptr(`${op.value}`);
           logger.info({ tag: 'memfound' }, `${inst.address} ${inst} ${f}`);
 
-          dumpLib('libjiagu_64.so');
+          // dumpLib('libjiagu_64.so');
           log(f, 'ps', {
             call(args) {
               this.symbol = args[1].readCString();
             },
             ret(retval) {
-              if (this.symbol === 'mprotect') {
-                return retval;
-              } else {
-              }
-              retval.replace(ptr(0x0));
+              const addr = DebugSymbol.fromName(this.symbol)?.address ?? NULL;
+              retval.replace(addr);
             },
           });
         }
@@ -530,7 +463,10 @@ function hookmore(name: string) {
   // if (found) hooksyscall();
 }
 
+let hooksyscalls = true;
 function hooksyscall() {
+  if (!hooksyscalls) return;
+  hooksyscalls = false;
   hookException([56, 62], {
     onBefore(context, num) {
       if (num === 56) {
@@ -567,7 +503,7 @@ function hooksyscall() {
         const path = this.path;
         if (
           path?.startsWith('/proc/') &&
-          (path.endsWith('/maps') ||
+          (path.endsWith('/maps ') ||
             path.endsWith('/fd ') ||
             path.endsWith('/task ') ||
             path.endsWith('/cmdline ') ||
@@ -634,29 +570,29 @@ function hooksyscall() {
     },
   });
 }
-
-function runme(offset, count = 322) {
-  const { base } = Process.getModuleByName('libjiagu.so');
-  console.log(base);
-  const map = {};
-  for (let i = 0; i < count; i += 1) {
-    const at = offset + 0x8 * i;
-    let value = null;
-    try {
-      //tufgapuzzleballspower.space/
-      https: value = base.add(at).readPointer();
-    } catch {}
-    console.log(value);
-    const info = DebugSymbol.fromAddress(value);
-    if (info.name && info.moduleName !== 'libjiagu.so') {
-      map[`${at}`] = [info.name, info.moduleName];
-    }
-  }
-  console.log(JSON.stringify(map));
-}
-Object.defineProperty(globalThis, 'runme', runme);
-rpc.exports.runme = runme;
-
+//
+// function runme(offset, count = 322) {
+//   const { base } = Process.getModuleByName('libjiagu.so');
+//   console.log(base);
+//   const map = {};
+//   for (let i = 0; i < count; i += 1) {
+//     const at = offset + 0x8 * i;
+//     let value = null;
+//     try {
+//       //tufgapuzzleballspower.space/
+//       https: value = base.add(at).readPointer();
+//     } catch {}
+//     console.log(value);
+//     const info = DebugSymbol.fromAddress(value);
+//     if (info.name && info.moduleName !== 'libjiagu.so') {
+//       map[`${at}`] = [info.name, info.moduleName];
+//     }
+//   }
+//   console.log(JSON.stringify(map));
+// }
+// Object.defineProperty(globalThis, 'runme', runme);
+// rpc.exports.runme = runme;
+//
 log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
   tag: 'call_constructors',
   transform: {
@@ -674,10 +610,10 @@ log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
   },
   ret(retval) {},
 });
-
-// Unity.setVersion('6000.0.31f1');
-// Unity.patchSsl();
-// Unity.attachScenes();
-// Unity.attachStrings();
-
-ClassLoader.perform(() => {});
+//
+// // Unity.setVersion('6000.0.31f1');
+// // Unity.patchSsl();
+// // Unity.attachScenes();
+// // Unity.attachStrings();
+//
+// ClassLoader.perform(() => {});

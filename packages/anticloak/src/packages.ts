@@ -17,6 +17,7 @@ function hookPackageManager() {
       if (ROOT_PACKAGES.includes(`${args[0]}`)) {
         args[0] = 'come.just.test.fake.app';
       }
+
       return method.call(this, ...args);
     },
     //after(_method, returnValue) {

@@ -4,6 +4,7 @@ import { Color } from '@clockwork/logging';
 import { addressOf } from '@clockwork/native';
 import { ClassesString } from './define/java.js';
 import { toHex } from './text.js';
+import { getApplication } from './index.js';
 import { JavaPrimitive } from './define/consts.js';
 const { black, gray, red, green, orange, dim, italic, bold, yellow, hidden } = Color.use();
 
@@ -185,35 +186,15 @@ function visualizeArray(value: any, type: string, jniEnv: NativePointer): string
 }
 
 function visualObject(value: NativePointer, type?: string): string {
-  // ? do not ask, i have no idea why this prevents crashes
-  // String(value) + String(value.readByteArray(8));
-
   try {
     if (type === ClassesString.String || type === ClassesString.CharSequence) {
       const str = Java.cast(value, Classes.CharSequence);
       return Color.string(str);
     }
-    if (type === ClassesString.Integer) {
-      const itgr = Java.cast(value, Classes.Integer);
-      return Color.number(`${itgr.intValue()}`);
-    }
-    if (type === ClassesString.Long) {
-      const lon = Java.cast(value, Classes.Long);
-      return Color.number(`${lon.longValue()}`);
-    }
 
     if (type === ClassesString.InputDevice) {
       const dev = Java.cast(value, Classes.InputDevice);
       return `${ClassesString.InputDevice}(name=${dev.getName()})`;
-    }
-
-    if (type === ClassesString.OpenSSLX509Certificate || type === ClassesString.X509Certificate) {
-      const win = Java.cast(value, Classes.X509Certificate);
-      return `${ClassesString.X509Certificate}(issuer=${win.getIssuerX500Principal()})`;
-    }
-    if (type === ClassesString.OpenSSLX509Certificate) {
-      const win = Java.cast(value, Classes.OpenSSLX509Certificate);
-      return `${ClassesString.OpenSSLX509Certificate}(issuer=${win.getIssuerX500Principal()})`;
     }
 
     if (type === ClassesString.Certificate) {
@@ -227,10 +208,30 @@ function visualObject(value: NativePointer, type?: string): string {
     }
 
     const object = Java.cast(value, Classes.Object);
-    // hardcoded classes which cause issues cause reasons ?
-    if (object.$className === 'android.graphics.Matrix') {
-      return `kilme`;
+    switch (object.$className) {
+      case ClassesString.Long:
+      case ClassesString.Integer:
+      case ClassesString.Boolean:
+        return `${Color.number(`${object}`)}`;
+      case 'android.graphics.Matrix':
+        return 'android.graphics.Matrix@????????';
+      case ClassesString.PathClassLoader:
+        return `${ClassesString.PathClassLoader}(dexPathList=...)`;
     }
+
+    if (object.$className === ClassesString.X509Certificate) {
+      const win = Java.cast(value, Classes.X509Certificate);
+      return `${ClassesString.X509Certificate}(issuer=${win.getIssuerX500Principal()})`;
+    }
+    if (object.$className === ClassesString.OpenSSLX509Certificate) {
+      const win = Java.cast(value, Classes.OpenSSLX509Certificate);
+      return `${ClassesString.OpenSSLX509Certificate}(issuer=${win.getIssuerX500Principal()})`;
+    }
+    if (object.$className === ClassesString.Preferences$Key) {
+      const key = Java.cast(value, Classes.Preferences$Key);
+      return `${Color.className('Preferences$Key')}${Color.bracket('(')}${Color.string(`${key}`)}${Color.bracket(')')}`;
+    }
+
     //@ts-ignore
     const strObj = Classes.String.valueOf.overload(ClassesString.Object).bind(Classes.String);
     return strObj(object);

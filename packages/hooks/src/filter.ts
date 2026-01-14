@@ -198,6 +198,17 @@ const Filter = {
     if (trace.includes('at java.lang.Thread.getAllStackTraces')) return false;
     return true;
   },
+  inmemorydex: (_: any, ...args: any[]) => {
+    const st = stacktraceList();
+    if (st.find((x) => x.includes('dalvik.system.InMemoryDexClassLoader') && x.includes('<init>')))
+      return false;
+    if (
+      st.find((x) => x.includes('<clinit>') && x.includes('com.appsflyer.internal.')) &&
+      st.find((x) => x.includes('java.lang.reflect.Method.invoke'))
+    )
+      return false;
+    return true;
+  },
 };
 
 const FilterJni = {

@@ -11,6 +11,7 @@ import { getArrayObjectHooks } from './hooks/arrayObjects.js';
 import { getCallObjectHooks } from './hooks/callObjects.js';
 import { getStringHooks } from './hooks/strings.js';
 import { getOtherHooks } from './hooks/generic.js';
+import { getFieldValueHooks } from './hooks/fieldValues.js';
 const logger = subLogger('jnitrace');
 const { black, gray, dim, redBright, magenta, orange, lavender } = Color.use();
 
@@ -24,6 +25,7 @@ function hookLibart(predicate: (thisRef: InvocationContext | CallbackContext) =>
   if (full) {
     items.push(...getCallObjectHooks(envWrapper));
     items.push(...getArrayObjectHooks(envWrapper));
+    items.push(...getFieldValueHooks(envWrapper));
     items.push(...getStringHooks(envWrapper));
     items.push(...getOtherHooks(envWrapper));
   }

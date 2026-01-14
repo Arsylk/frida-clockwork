@@ -1,7 +1,7 @@
-import { BuildProp, Country, generic, InstallReferrer } from '@clockwork/anticloak';
+import { BuildProp, Country, generic, hookSettings, InstallReferrer } from '@clockwork/anticloak';
 import { SoInfo } from '@clockwork/common/dist/define/linker';
 
-import { ElfHeader, LinkerSym, memcmp, memmove, ProcMaps } from '@clockwork/cmodules';
+import { ElfHeader, LinkerSym, memcmp, memmove, ProcMaps, strlen } from '@clockwork/cmodules';
 import { ClassesString, Consts, enumerateMembers, getFindUnique, Text, tryNull } from '@clockwork/common';
 import { dumpLib, hookArtDexFile, initSoDump } from '@clockwork/dump';
 import { always, ClassLoader, Filter, getHookUnique, hook, ifKey } from '@clockwork/hooks';
@@ -30,11 +30,7 @@ const uniqEnum = (clazzName: string, depth?: number) => {
 };
 
 const libc = Process.getModuleByName('libc.so');
-Logcat.hookLogcat(function (msgx) {
-  if (msgx.includes('UnityTls')) {
-    ProcMaps.printStacktrace();
-  }
-});
+Logcat.hookLogcat(function (msgx) {});
 ClassLoader.perform(injectSsl);
 attach((x) => ProcMaps.inRange(x.returnAddress), true);
 Process.attachModuleObserver({
@@ -76,64 +72,37 @@ log(LinkerSym.__dl__ZN6soinfo17call_constructorsEv, 'p', {
   call(args) {
     this.soinfo = new SoInfo(args[0]);
   },
-  ret(retval) {
-    if (this.soinfo.getName().includes('jiagu')) {
-    }
-  },
 });
-// Process.attachModuleObserver({
-//   onAdded(module) {
-//     const { name, base, size } = module;
-//     if (name === 'libjiagu.so') {
-//       log(getEnumerated(module, 'JNI_OnLoad'), 'pp', {
-//         call(args) {
-//           Interceptor.detachAll();
-//           Stalker.stalk(this.threadId, base);
-//           Interceptor.replace(
-//             libc.getExportByName('tgkill'),
-//             new NativeCallback(
-//               function (code) {
-//                 console.log('tgkill', code);
-//                 console.log(
-//                   Thread.backtrace(this.context, Backtracer.FUZZY).map(DebugSymbol.fromAddress).join('\n\t'),
-//                 );
-//               },
-//               'void',
-//               ['int'],
-//             )_,
-//           );
-//         },
-//       });
-//     }
-//   },
-// });
 log(Libc.strdup, 's', { predicate: ProcMaps.inRange });
 log(Libc.memchr, 'pci', { predicate: ProcMaps.inRange });
-// Interceptor.attach(Libc.memmove, memmove);
-// Interceptor.attach(Libc.memcmp, memcmp);
+log(Libc.strstr, 'ss', { predicate: ProcMaps.inRange });
+log(Libc.strcmp, 'ss', { predicate: ProcMaps.inRange });
+memmove.verbose.writeByteArray([0x1]);
+Interceptor.attach(Libc.memmove, memmove);
+Interceptor.attach(Libc.memcmp, memcmp);
+Interceptor.attach(Libc.strlen, strlen);
 Java.performNow(() => {
   generic();
   hook(Classes.Locale, 'getDefault', {
     loggingPredicate: always(false),
     replace(method) {
-      return Classes.Locale.$new('vi', 'VN');
+      return Classes.Locale.$new('vn', 'VN');
     },
   });
   hook(Classes.TimeZone, 'getDefault', {
     loggingPredicate: always(false),
     replace(method) {
       // return Classes.TimeZone.getDefault();
-      return Classes.TimeZone.getTimeZone('Asia/Dhaka');
+      return Classes.TimeZone.getTimeZone('Asia/Saigon');
     },
   });
   hook(Classes.WebView, 'loadUrl');
   hook(Classes.SharedPreferencesImpl, 'getBoolean', {
     replace: ifKey((key) => {
       if (key === 'campaign') return 'Non-organic';
-      if (key === 'toCenter') return true;
-      if (key === 'kwsk') return 'https://google.pl/search?q=hi';
     }),
   });
+  hookSettings();
 });
 
 Unity.setVersion('6000.1.13f1');

@@ -7,7 +7,7 @@ import { Color, logger } from '@clockwork/logging';
 import { addressOf } from '@clockwork/native';
 import { JniHookItem, JniHookItems } from '../hooks.js';
 import Java from 'frida-java-bridge';
-import { ProcMaps } from '@clockwork/cmodules';
+import { ElfHeader, ProcMaps } from '@clockwork/cmodules';
 const { JavaPrimitive } = Consts;
 const { dim } = Color.use();
 
@@ -25,8 +25,8 @@ function getCallObjectHooks(envWrapper: EnvWrapper): JniHookItems {
           : JniInvokeMode.Normal;
     const cb = JniInvokeCallbacks(envWrapper, j, mode, {
       onEnter({ method, jniEnv, methodID, jArgs }) {
-        this.ignore = filterCallObject.call(this, method, jArgs);
-        if (this.ignore) return;
+        const ignore = (this.ignore = filterCallObject.call(this, method, jArgs));
+        if (ignore) return;
 
         const mappedArgs = new Array<string>(method?.parameters?.length ?? 0);
         for (const i in method?.parameters ?? []) {
@@ -36,7 +36,7 @@ function getCallObjectHooks(envWrapper: EnvWrapper): JniHookItems {
         }
         const msg = formatCallObject(methodID, method, mappedArgs);
         const addrRet = getAddrRet(this.context, this.returnAddress);
-        logger.info(`[${dim(name)}] ${msg} ${addressOf(addrRet)}`);
+        logger.info(`[${dim(name)}] ${msg} ${addrRet}`);
       },
       onLeave({ jniEnv, method, jArgs }, retval) {
         if (this.ignore || method?.isVoid) return;
@@ -77,7 +77,7 @@ function filterCallObject(
     ['org.godotengine.godot.Godot', ['getCACertificates']],
     ['com.unity3d.player.UnityPlayer', ['executeMainThreadJobs']],
     ['android.view.Choreographer', ['postFrameCallback']],
-    ['java.lang.Long', ['longValue']],
+    ['java.lang.Long', 'longValue'],
     ['android.media.MediaRouter$RouteInfo', ['getPresentationDisplay']],
     ['android.media.MediaRouter', ['getSelectedRoute']],
     ['android.view.Display', ['getDisplayId']],
@@ -204,8 +204,12 @@ function afterCallObject(
   if (method.className === ClassesString.Settings$Global && method.name === 'getInt') {
     // retval.replace(ptr(0x0));
   }
-  if (method.className === ClassesString.Settings$Global && method.name === 'getInt') {
+  if (
+    [ClassesString.Settings$Secure, ClassesString.Settings$Global].includes(method.className) &&
+    method.name === 'getInt'
+  ) {
     const key = Java.cast(jArgs[1] as any, Classes.String);
+    logger.info({ tag: 'global' }, `${key}`);
     switch (`${key}`) {
       case 'adb_enabled':
       case 'development_settings_enabled':
@@ -255,7 +259,7 @@ function getAddrRet(ctx: CpuContext, returnAddress: NativePointer): NativePointe
   const fp = (ctx as Arm64CpuContext).fp;
   if (isNully(fp)) return returnAddress;
   const nfp = fp.add(0x8);
-  if (isNully(nfp) || Number(nfp) < 0x100000) return returnAddress;
+  if (isNully(nfp) || Number(nfp) < 0x01ffffffff || Number(nfp) > 0xffffffffff) return returnAddress;
   const nval = nfp.readPointer();
   return isNully(nval) ? returnAddress : nval;
 }

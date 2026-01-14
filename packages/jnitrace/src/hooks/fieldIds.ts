@@ -16,7 +16,7 @@ function getFieldIdHooks(envWrapper: EnvWrapper): JniHookItems {
 
       const sigName = `${sig?.readCString()}`;
       const msg = formatGetFieldId(retval, fieldName, clazzName, sigName, isStatic);
-      const label = isStatic ? JNI.GetStaticFieldID.name : JNI.GetMethodID.name;
+      const label = isStatic ? JNI.GetStaticFieldID.name : JNI.GetFieldID.name;
       logger.info(`[${dim(label)}] ${msg} ${addressOf(this.returnAddress)}`);
     };
   const hooks: JniHookItemsObject = {

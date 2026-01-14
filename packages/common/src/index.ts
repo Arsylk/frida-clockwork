@@ -38,11 +38,11 @@ function isJWrapper(clazzOrName: Java.Wrapper | string): clazzOrName is Java.Wra
   return typeof clazzOrName === 'object' ? Reflect.has(clazzOrName, '$className') : false;
 }
 
-function isIterable(obj: any) {
+function isIterable(obj: any, string = false) {
   if (obj === null || obj === undefined) {
     return false;
   }
-  return typeof obj[Symbol.iterator] === 'function';
+  return (string || typeof obj !== 'string') && typeof obj[Symbol.iterator] === 'function';
 }
 
 function stacktrace(e?: Java.Wrapper): string {
@@ -93,26 +93,26 @@ const filterMulti = (
   for (const [tfirst, tsecond] of filter) {
     let firstpass = isIterable(tfirst) && tfirst.length === 0;
     let secondpass = isIterable(tsecond) && tsecond.length === 0;
-    if (!firstpass) {
-      for (const arrFirst of isIterable(tfirst) ? tfirst : [tfirst]) {
-        if (arrFirst === first) {
-          firstpass = true;
-          break;
-        }
+    for (const arrFirst of isIterable(tfirst) ? tfirst : [tfirst]) {
+      if (arrFirst == first) {
+        firstpass = true;
+        break;
       }
     }
-    if (!secondpass) {
-      for (const arrSecond of isIterable(tsecond) ? tsecond : [tsecond]) {
-        if (arrSecond === second) {
-          secondpass = true;
-          break;
-        }
+    for (const arrSecond of isIterable(tsecond) ? tsecond : [tsecond]) {
+      if (arrSecond == second) {
+        secondpass = true;
+        break;
       }
     }
     if (firstpass && secondpass) return true;
   }
   return false;
 };
+
+function getRandomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
 const emitter = new EventEmitter();
 declare global {
@@ -181,6 +181,10 @@ rpc.exports.init = function (stage, params: object) {
   }, {} as PropertyDescriptorMap);
   Object.defineProperties(globalThis, ent);
   logger.info({ tag: 'externalargs' }, stringify({ stage: stage, params: params, pid: Process.id }));
+  Java.perform(() => {
+    (Java.classFactory as any).cacheDir = `/data/data/${globalThis.packageName}/`;
+    (Java.classFactory as any).codeCacheDir = `/data/data/${globalThis.packageName}/`;
+  });
 };
 
 export {
@@ -191,6 +195,7 @@ export {
   enumerateMembers,
   findClass,
   findChoose,
+  getApplication,
   getApplicationContext,
   getFindUnique,
   isJWrapper,
@@ -205,4 +210,5 @@ export {
   jarrayToBuffer,
   filterMulti,
   isNullyVararg,
+  getRandomInt,
 };

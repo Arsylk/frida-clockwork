@@ -15,7 +15,15 @@ import {
   tryNull,
   vs,
 } from '@clockwork/common';
-import { dumpLib, hookArtDexFile, hookArtLoader, initDexDump, initSoDump } from '@clockwork/dump';
+import {
+  dumpLib,
+  hookArtDexFile,
+  hookArtLoader,
+  hookByteBufferDump,
+  hookInMemoryDexDump,
+  initDexDump,
+  initSoDump,
+} from '@clockwork/dump';
 import {
   ClassLoader,
   Filter,
@@ -56,8 +64,15 @@ Object.defineProperties(globalThis, {
   Vn: {
     value: { get: () => Vn },
   },
-  log: {
-    value: { get: () => Native.log },
+  runme: {
+    get: () => () => {
+      Java.perform(() => {
+        hookByteBufferDump();
+        hookInMemoryDexDump();
+        findClass('com.glads.tragica.Voyage').oppose(1, Date.now() - 15);
+        logger.info({ tag: 'runme' }, 'done');
+      });
+    },
   },
 });
 
@@ -146,6 +161,14 @@ ClassLoader.perform(() => {
       logger.info({ tag: 'fragment' }, `$init: ${this.$className}`);
     },
   });
+  uniqFind('com.glads.tragica.Voyage', (_clz) => {
+    const clz = Java.retain(_clz);
+    setTimeout(() => {
+      clz.oppose(1, Date.now() - 15);
+      logger.info({ tag: 'initme' }, 'done');
+    }, 1000);
+    hookByteBufferDump();
+  });
 });
 Network.attachGetAddrInfo();
 
@@ -153,9 +176,9 @@ Network.attachGetAddrInfo();
 //     logger.info({ tag: 'localcocos' }, `${kccxxxxxxxxxxxxxxxxey} -> ${this.fallback()}`);
 //     return undefined;
 // });
-Unity.patchSsl();
-Unity.attachScenes();
-Unity.attachStrings();
+// Unity.patchSsl();
+// Unity.attachScenes();
+// Unity.attachStrings();
 
 Native.log(Libc.mprotect, 'pii', {
   nolog: true,
@@ -198,7 +221,7 @@ Process.attachModuleObserver({
     if (name === 'l7e2f4a6e.so') return;
     logger.info({ tag: 'phdr_add' }, `${Text.stringify({ name: name, base: base, size: size })}`);
     ProcMaps.addRange(module);
-    if (name === 'libapp.so') {
+    if (name === 'libjiagu_64.so') {
       Native.log(DebugSymbol.fromName('AAssetManager_open').address, 'psi');
       Native.log(DebugSymbol.fromName('AAssetManager_read').address, 'ppi');
       Native.log(Libc.strcmp, 'ss', { predicate: ProcMaps.inRange });

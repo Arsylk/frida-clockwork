@@ -1,56 +1,55 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.0.4/schema.json",
-    "vcs": {
-        "enabled": true,
-        "clientKind": "git",
-        "defaultBranch": "main",
-        "useIgnoreFile": true
-    },
-    "javascript": {
-        "formatter": {
-            "quoteStyle": "single",
-            "trailingCommas": "all",
-            "bracketSpacing": true,
-            "semicolons": "always"
-        }
-    },
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "defaultBranch": "main",
+    "useIgnoreFile": true
+  },
+  "javascript": {
     "formatter": {
-        "enabled": true,
-        "formatWithErrors": true,
-        "indentStyle": "space",
-        "indentWidth": 4,
-        "lineWidth": 110
-    },
-    "linter": {
-        "enabled": true,
-        "rules": {
-            "recommended": true,
-            "suspicious": {
-                "noAssignInExpressions": "off",
-                "noExplicitAny": "off",
-                "noConfusingVoidType": "off"
-            },
-            "complexity": {
-                "useArrowFunction": "info"
-            },
-            "style": {
-                "noParameterAssign": "off",
-                "useNodejsImportProtocol": "off",
-                "useTemplate": {
-                    "level": "warn",
-                    "fix": "safe"
-                }
-            },
-            "correctness": {
-                "noUnreachable": {
-                    "level": "warn"
-                }
-            }
-        }
-    },
-    "files": {
-        "experimentalScannerIgnores": ["dist/**", "node_modules/**"],
-        "includes": ["*.ts", "*.js"],
-        "maxSize": 10485760
+      "quoteStyle": "single",
+      "trailingCommas": "all",
+      "bracketSpacing": true,
+      "semicolons": "always"
     }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": true,
+    "indentStyle": "space",
+    "indentWidth": 4,
+    "lineWidth": 110
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "noExplicitAny": "off",
+        "noConfusingVoidType": "off"
+      },
+      "complexity": {
+        "useArrowFunction": "info"
+      },
+      "style": {
+        "noParameterAssign": "off",
+        "useNodejsImportProtocol": "off",
+        "useTemplate": {
+          "level": "warn",
+          "fix": "safe"
+        }
+      },
+      "correctness": {
+        "noUnreachable": {
+          "level": "warn"
+        }
+      }
+    }
+  },
+  "files": {
+    "includes": ["*.ts", "*.js"],
+    "maxSize": 10485760
+  }
 }

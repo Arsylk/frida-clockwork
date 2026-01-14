@@ -53,8 +53,8 @@ function propMapper(key: string): string | undefined | null {
       return 'verified';
     case 'sys.oem_unlock_allowed':
       return '0';
-    case 'persist.sys.timezone':
-      return 'America/Sao_Paulo';
+    // case 'persist.sys.timezone':
+    //   return 'persist.sys.timezonepersist.sys.timezone';
     case 'ro.hardware.power':
     case 'init.svc.adbd':
     case 'sys.usb.controller':
